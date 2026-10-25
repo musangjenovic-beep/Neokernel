@@ -1,0 +1,6 @@
+{
+  "name": "VirtuArch - Simulateur d'Ordinateur Virtuel & Système d'Exploitation",
+  "description": "Simulateur de matériel informatique complet : CPU, registres, ALU, RAM avec index DBD optimisé, stockage virtuel, écran pixel et interruptions matérielles.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
