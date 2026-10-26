@@ -4,15 +4,12 @@ import {
   Code,
   Play,
   Binary,
-  Layers,
-  Sparkles,
   PlusCircle,
-  FileText,
-  Volume2,
-  Tv,
   CheckCircle2,
-  AlertTriangle,
+  HardDrive,
+  Usb,
   RotateCcw,
+  Sparkles,
 } from 'lucide-react';
 
 interface LanguageStudioDrawerProps {
@@ -29,41 +26,54 @@ export const LanguageStudioDrawer: React.FC<LanguageStudioDrawerProps> = ({
   onRefresh,
 }) => {
   const studio = computer.os.studio;
-  const [sourceCode, setSourceCode] = useState<string>(studio.modelesProgrammes[0].code);
-  const [appName, setAppName] = useState<string>(studio.modelesProgrammes[0].nom);
-  const [selectedTemplate, setSelectedTemplate] = useState<number>(0);
+  const [sourceCode, setSourceCode] = useState<string>(
+    `// ==========================================
+// MON SYSTEME D'EXPLOITATION PERSONNALISE
+// ==========================================
+CLEAR
+RECT 15, 15, 300, 135
+PRINT 35, 35, "MON SYSTEME PERSONNALISE EST BOOTE !"
+PRINT 35, 52, "CHARGE DEPUIS LA CLE USB EN RAM 0x0000"
+PRINT 35, 70, "AFFICHAGE DIRECT SUR MONITEUR 330x165"
+LINE 35, 88, 295, 88
+PRINT 35, 100, "TOUT FONCTIONNE EN BINAIRE PUR"
+BEEP 520
+HALT`
+  );
+  const [appName, setAppName] = useState<string>('MON_OS_PERSO');
+  const [ciblePortUsb, setCiblePortUsb] = useState<1 | 2 | 3>(
+    computer.hubUsb.cleUsb.port || 3
+  );
   const [newKeyword, setNewKeyword] = useState<string>('');
   const [newDesc, setNewDesc] = useState<string>('');
-  const [compileSuccess, setCompileSuccess] = useState<boolean>(false);
+  const [flashSuccessMsg, setFlashSuccessMsg] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const handleSelectTemplate = (idx: number) => {
-    setSelectedTemplate(idx);
     const tmpl = studio.modelesProgrammes[idx];
     if (tmpl) {
       setSourceCode(tmpl.code);
-      setAppName(tmpl.nom);
+      setAppName(tmpl.nom.toUpperCase().replace(/\s+/g, '_'));
     }
   };
 
-  const handleCompile = () => {
-    computer.activerAccesDisque(400, 4);
-    const prog = computer.os.compilerEtCharger(sourceCode, appName);
-    if (prog.succes) {
-      setCompileSuccess(true);
-      setTimeout(() => setCompileSuccess(false), 2500);
-    }
-    computer.os.rafraichirBureau();
+  const handleFlashToUsb = () => {
+    computer.flasherEtBrancherCleUsb(appName, sourceCode, ciblePortUsb);
+    setFlashSuccessMsg(
+      `Système "${appName}" flashé avec succès sur la Clé USB et inséré sur le Port ${ciblePortUsb} !`
+    );
+    setTimeout(() => setFlashSuccessMsg(null), 3500);
     onRefresh();
   };
 
-  const handleExecute = () => {
-    computer.activerAccesDisque(600, 5);
-    handleCompile();
-    computer.os.executerApplicationBinaire();
-    onClose();
-    onRefresh();
+  const handleFlashAndBoot = () => {
+    handleFlashToUsb();
+    setTimeout(() => {
+      computer.booterDepuisCle();
+      onClose();
+      onRefresh();
+    }, 150);
   };
 
   const handleAddRule = () => {
@@ -74,26 +84,26 @@ export const LanguageStudioDrawer: React.FC<LanguageStudioDrawerProps> = ({
     onRefresh();
   };
 
-  const compiled = computer.os.derniereAppCompilee;
+  const cle = computer.hubUsb.cleUsb;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-stone-950/80 backdrop-blur-sm animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-stone-950/85 backdrop-blur-sm animate-in fade-in duration-150">
       <div className="relative w-full max-w-5xl max-h-[92vh] bg-stone-900 border-2 border-stone-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden text-stone-100 font-sans">
-        {/* Top Header */}
+        {/* En-tête */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-stone-800 bg-stone-900/90">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-              <Code className="w-4 h-4" />
+              <HardDrive className="w-4 h-4" />
             </div>
             <div>
               <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                <span>Studio de Création de Langages & d'Applications</span>
+                <span>Éditeur de Système d'Exploitation & Flasheur Clé USB</span>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  100% Binaire
+                  Ports USB 1, 2, 3
                 </span>
               </h2>
               <p className="text-[11px] text-stone-400">
-                Définissez la syntaxe de votre propre langage, compilez en bytecode binaire et exécutez sur l'OS
+                Écrivez votre système personnalisé, flashez-le sur la clé USB et insérez-la sur le Port 1, 2 ou 3 pour booter
               </p>
             </div>
           </div>
@@ -106,25 +116,71 @@ export const LanguageStudioDrawer: React.FC<LanguageStudioDrawerProps> = ({
           </button>
         </div>
 
-        {/* Body Container */}
+        {/* Corps */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          {/* Grille : Éditeur de Code + Règles du Langage */}
+          {/* Sélection du Port USB d'insertion & État de la clé */}
+          <div className="p-3 bg-stone-950 border border-stone-800 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <Usb className="w-4 h-4 text-amber-400" />
+              <div>
+                <span className="font-semibold text-stone-200">Emplacement physique de la Clé USB :</span>
+                <span className="text-[11px] text-stone-400 ml-2">
+                  Actuellement : {cle.estBranchee ? `Branchée sur Port ${cle.port}` : 'Éjectée'}
+                  {cle.estBootable ? ` (${cle.nomSysteme} prêt)` : ' (Vierge)'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-stone-400">Insérer sur :</span>
+              {([1, 2, 3] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => {
+                    setCiblePortUsb(p);
+                    computer.hubUsb.brancherCleSurPort(p);
+                    computer.os.rafraichirBureau();
+                    onRefresh();
+                  }}
+                  className={`px-2.5 py-1 rounded text-xs font-mono font-medium transition-colors ${
+                    cle.estBranchee && cle.port === p
+                      ? 'bg-amber-500 text-stone-950 font-bold'
+                      : 'bg-stone-900 border border-stone-800 text-stone-300 hover:text-white'
+                  }`}
+                >
+                  Port {p}
+                </button>
+              ))}
+              <button
+                onClick={() => {
+                  computer.hubUsb.debrancherCle();
+                  computer.os.rafraichirBureau();
+                  onRefresh();
+                }}
+                className={`px-2.5 py-1 rounded text-xs font-mono font-medium transition-colors ${
+                  !cle.estBranchee
+                    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                    : 'bg-stone-900 border border-stone-800 text-stone-400 hover:text-stone-200'
+                }`}
+              >
+                Éjecter
+              </button>
+            </div>
+          </div>
+
+          {/* Grille : Éditeur + Règles */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-            {/* Colonne Gauche (7 colonnes) : Éditeur & Modèles */}
+            {/* Colonne Éditeur (7 colonnes) */}
             <div className="lg:col-span-7 space-y-3">
-              {/* Choix du modèle */}
+              {/* Modèles */}
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                <span className="text-stone-400 text-[11px]">Modèle d'Application :</span>
+                <span className="text-stone-400 text-[11px]">Modèles de départ :</span>
                 <div className="flex items-center gap-1">
                   {studio.modelesProgrammes.map((tmpl, idx) => (
                     <button
                       key={idx}
                       onClick={() => handleSelectTemplate(idx)}
-                      className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
-                        selectedTemplate === idx
-                          ? 'bg-emerald-500 text-stone-950 font-bold'
-                          : 'bg-stone-950 border border-stone-800 text-stone-400 hover:text-white'
-                      }`}
+                      className="px-2 py-0.5 rounded text-[11px] font-medium bg-stone-950 border border-stone-800 text-stone-400 hover:text-white hover:border-emerald-500/40 transition-colors"
                     >
                       {tmpl.nom}
                     </button>
@@ -132,62 +188,61 @@ export const LanguageStudioDrawer: React.FC<LanguageStudioDrawerProps> = ({
                 </div>
               </div>
 
-              {/* Nom de l'application */}
+              {/* Nom du système */}
               <div className="flex items-center gap-2 text-xs">
-                <span className="text-stone-400 text-[11px]">Nom :</span>
+                <span className="text-stone-400 text-[11px]">Nom du Système :</span>
                 <input
                   type="text"
                   value={appName}
-                  onChange={(e) => setAppName(e.target.value)}
+                  onChange={(e) => setAppName(e.target.value.toUpperCase())}
                   className="flex-1 bg-stone-950 border border-stone-800 rounded px-2.5 py-1 font-mono text-emerald-300 outline-none focus:border-emerald-500"
+                  placeholder="EX: MON_OS"
                 />
               </div>
 
               {/* Textarea Code Source */}
-              <div className="relative">
-                <textarea
-                  value={sourceCode}
-                  onChange={(e) => setSourceCode(e.target.value)}
-                  rows={11}
-                  spellCheck={false}
-                  className="w-full p-3 bg-stone-950 border border-stone-800 rounded-lg text-xs font-mono text-emerald-300 outline-none focus:border-emerald-500/60 leading-relaxed resize-none"
-                  placeholder="Écrivez vos instructions ici..."
-                />
-              </div>
+              <textarea
+                value={sourceCode}
+                onChange={(e) => setSourceCode(e.target.value)}
+                rows={11}
+                spellCheck={false}
+                className="w-full p-3 bg-stone-950 border border-stone-800 rounded-lg text-xs font-mono text-emerald-300 outline-none focus:border-emerald-500/60 leading-relaxed resize-none"
+                placeholder="Écrivez le code de votre système d'exploitation ici..."
+              />
 
-              {/* Boutons d'Action : Compiler & Exécuter */}
-              <div className="flex items-center justify-between pt-1">
+              {/* Actions de flashage */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                 <button
-                  onClick={handleCompile}
-                  className="px-4 py-2 bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5"
+                  onClick={handleFlashToUsb}
+                  className="px-3.5 py-2 bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5"
                 >
-                  <Binary className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Compiler en Bytecode Binaire</span>
+                  <HardDrive className="w-3.5 h-3.5 text-amber-400" />
+                  <span>1. Flasher sur la Clé USB (Port {ciblePortUsb})</span>
                 </button>
 
                 <button
-                  onClick={handleExecute}
-                  className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-stone-950 rounded-lg text-xs font-bold transition-colors flex items-center gap-2 shadow-lg"
+                  onClick={handleFlashAndBoot}
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-stone-950 rounded-lg text-xs font-bold transition-colors flex items-center gap-2 shadow-lg"
                 >
-                  <Play className="w-4 h-4 fill-current" />
-                  <span>Exécuter sur le Moniteur 330×165</span>
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>2. Flasher & Booter Immédiatement</span>
                 </button>
               </div>
 
-              {compileSuccess && (
-                <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 rounded text-emerald-300 text-xs flex items-center gap-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                  <span>Compilation binaire réussie ! Bytecode chargé en mémoire.</span>
+              {flashSuccessMsg && (
+                <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-300 text-xs flex items-center gap-2 animate-in fade-in">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>{flashSuccessMsg}</span>
                 </div>
               )}
             </div>
 
-            {/* Colonne Droite (5 colonnes) : Règles de Syntaxe & Opcode Binaire */}
+            {/* Colonne Opcodes & Règles (5 colonnes) */}
             <div className="lg:col-span-5 space-y-3">
               <div className="bg-stone-950 border border-stone-800 rounded-xl p-3.5 space-y-2.5">
                 <div className="flex items-center justify-between pb-1.5 border-b border-stone-800">
                   <span className="text-xs font-bold text-stone-200">
-                    Règles & Opcodes du Langage
+                    Instructions & Opcodes Reconnus
                   </span>
                   <span className="text-[10px] font-mono text-emerald-400">
                     {studio.regles.length} Instructions
@@ -211,10 +266,10 @@ export const LanguageStudioDrawer: React.FC<LanguageStudioDrawerProps> = ({
                   ))}
                 </div>
 
-                {/* Formulaire d'ajout d'une nouvelle règle de langage */}
+                {/* Formulaire ajout règle */}
                 <div className="pt-2 border-t border-stone-800 space-y-1.5 text-xs">
                   <div className="text-[10px] font-bold text-stone-400">
-                    Créer une nouvelle instruction :
+                    Ajouter une nouvelle instruction au compilateur :
                   </div>
                   <div className="grid grid-cols-2 gap-1.5">
                     <input
@@ -237,26 +292,25 @@ export const LanguageStudioDrawer: React.FC<LanguageStudioDrawerProps> = ({
                     className="w-full py-1 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded text-[11px] font-medium transition-colors flex items-center justify-center gap-1"
                   >
                     <PlusCircle className="w-3 h-3 text-emerald-400" />
-                    <span>Ajouter au Langage</span>
+                    <span>Enregistrer dans le compilateur</span>
                   </button>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Bytecode Binaire Généré (0bXXXXXXXX) */}
-          {compiled && (
-            <div className="bg-stone-950 border border-stone-800 rounded-xl p-4 font-mono text-xs space-y-2">
-              <div className="flex items-center justify-between text-stone-400 text-[11px] pb-1.5 border-b border-stone-800">
+          {/* Bytecode enregistré sur la clé */}
+          {cle.bytecodeBinaire.length > 0 && (
+            <div className="bg-stone-950 border border-stone-800 rounded-xl p-3.5 font-mono text-xs space-y-2">
+              <div className="flex items-center justify-between text-stone-400 text-[11px] pb-1 border-b border-stone-800">
                 <span className="font-bold text-stone-300 flex items-center gap-1.5">
                   <Binary className="w-3.5 h-3.5 text-cyan-400" />
-                  Flux Binaire Brut Généré ({compiled.octets.length} octets) :
+                  Contenu Binaire Inscrit sur la Clé USB ({cle.bytecode.length} octets) :
                 </span>
-                <span>Format Machine : 8 bits par mot</span>
+                <span>Fichier : BOOT.BIN (Port {cle.port})</span>
               </div>
-
-              <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-1">
-                {compiled.bytecodeBinaire.map((b, i) => (
+              <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1">
+                {cle.bytecodeBinaire.map((b, i) => (
                   <span
                     key={i}
                     className="px-2 py-0.5 bg-stone-900 border border-stone-800 text-emerald-300 rounded text-[10px]"
@@ -272,13 +326,13 @@ export const LanguageStudioDrawer: React.FC<LanguageStudioDrawerProps> = ({
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-3 border-t border-stone-800 bg-stone-900 text-xs text-stone-400 font-mono">
           <div>
-            Compilateur : {studio.nomLangage} · Cible : PC Virtuel VGA 330×165
+            Support : Clé USB bootable sur Port 1, Port 2 ou Port 3 · RAM : 64 KB (initialisée à 0x00)
           </div>
           <button
-            onClick={handleExecute}
+            onClick={handleFlashAndBoot}
             className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-stone-950 rounded font-bold transition-colors"
           >
-            Lancer l'Application
+            Flasher & Booter
           </button>
         </div>
       </div>

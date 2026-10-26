@@ -32,7 +32,7 @@ export const GuideManuelView: React.FC<GuideManuelViewProps> = ({
   onRefresh,
 }) => {
   const [sectionActive, setSectionActive] = useState<
-    'intro' | 'assembleur' | 'kernel_os' | 'parametres' | 'persistance' | 'apps' | 'json' | 'securite' | 'materiel_crt'
+    'intro' | 'assembleur' | 'kernel_os' | 'parametres' | 'persistance' | 'apps' | 'json' | 'securite' | 'materiel_crt' | 'bios_usb'
   >('intro');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [injectionSuccess, setInjectionSuccess] = useState<string | null>(null);
@@ -44,8 +44,9 @@ export const GuideManuelView: React.FC<GuideManuelViewProps> = ({
   };
 
   const handleInjectOsCode = (source: string, message: string) => {
-    ordinateur.os.rechargerCodeOS(source);
-    setInjectionSuccess(message);
+    const port = ordinateur.hubUsb.cleUsb.port || 3;
+    ordinateur.flasherEtBrancherCleUsb('OS_GUIDE', source, port);
+    setInjectionSuccess(`${message} (Flashé sur Clé USB Port ${port})`);
     onRefresh();
     setTimeout(() => setInjectionSuccess(null), 3000);
   };
@@ -68,6 +69,7 @@ export const GuideManuelView: React.FC<GuideManuelViewProps> = ({
     { id: 'json', label: '7. Format d\'Injection JSON', icon: Database },
     { id: 'securite', label: '8. Sécurité (Double-Appui / Maintien)', icon: ShieldAlert },
     { id: 'materiel_crt', label: '9. Matériel & Audio Réaliste', icon: Tv },
+    { id: 'bios_usb', label: '10. Vrai BIOS & Boot USB Multi-Ports', icon: HardDrive },
   ] as const;
 
   return (
@@ -529,7 +531,9 @@ DBD_GET 42
                   </span>
                   <button
                     onClick={() => {
-                      ordinateur.os.compilerEtCharger(
+                      const port = ordinateur.hubUsb.cleUsb.port || 3;
+                      ordinateur.flasherEtBrancherCleUsb(
+                        'Fenetre Custom',
                         `CLEAR
 RECT 25, 20, 280, 115
 PRINT 45, 35, "FENETRE D'APPLICATION PERSONNALISEE"
@@ -539,17 +543,17 @@ PRINT 45, 75, "Palette binaire 16 teintes operationnelle"
 BEEP 440
 BEEP 880
 HALT`,
-                        'Fenetre Custom'
+                        port
                       );
-                      ordinateur.os.executerApplicationBinaire();
-                      setInjectionSuccess("Application compilée et lancée sur l'écran !");
+                      ordinateur.booterDepuisCle();
+                      setInjectionSuccess(`Application flashée sur Clé USB (Port ${port}) et lancée !`);
                       onRefresh();
                       setTimeout(() => setInjectionSuccess(null), 3000);
                     }}
                     className="flex items-center gap-1 px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-bold rounded text-[11px] font-mono shadow"
                   >
                     <Play className="w-3 h-3" />
-                    <span>Compiler & Lancer</span>
+                    <span>Flasher & Lancer</span>
                   </button>
                 </div>
                 <pre className="text-[11px] font-mono text-stone-300 p-2 bg-stone-950 rounded border border-stone-800">
@@ -673,12 +677,12 @@ HALT`}
                 <button
                   onClick={() => {
                     ordinateur.os.verifierOuDeclencherAlerteSecurite(
-                      'BOOT_BOS',
-                      'B',
-                      'Test Sécurité Boot',
+                      'BOOT_USB',
+                      'ENTREE',
+                      'Test Sécurité Boot USB',
                       () => {
                         ordinateur.activerAccesDisque(400, 4);
-                        ordinateur.os.chargerOsBureau();
+                        ordinateur.booterDepuisCle();
                       }
                     );
                     onRefresh();
@@ -781,6 +785,77 @@ HALT`}
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* SECTION 10: VRAI BIOS ROM & BOOT USB MULTI-PORTS */}
+        {sectionActive === 'bios_usb' && (
+          <div className="space-y-6">
+            <div className="border-b border-stone-800 pb-4">
+              <h3 className="text-base font-bold text-stone-100 flex items-center gap-2">
+                <HardDrive className="w-5 h-5 text-emerald-400" />
+                <span>10. Vrai BIOS ROM, Mémoire Vierge (0x0000) & Clé USB Multi-Ports (1, 2, 3)</span>
+              </h3>
+              <p className="text-xs text-stone-400 mt-1">
+                Comprendre l'absence de système de base préchargé, le diagnostic POST et le workflow de boot personnalisé.
+              </p>
+            </div>
+
+            {/* Carte 1: Philosophie Mémoire Vierge */}
+            <div className="p-4 bg-stone-900 border border-stone-800 rounded-xl space-y-3 text-xs text-stone-300">
+              <h4 className="font-bold text-emerald-300 flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-emerald-400" />
+                <span>Initialisation Réelle : Zéro Système de Test Préchargé</span>
+              </h4>
+              <p>
+                Sur un véritable ordinateur physique, la mémoire vive (RAM de 64 Ko, de <code className="text-emerald-300 font-mono">0x0000</code> à <code className="text-emerald-300 font-mono">0xFFFF</code>) démarre <strong>strictement vide, initialisée à zéro (<code className="text-amber-300 font-mono">0x00</code>)</strong>.
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-stone-400">
+                <li>Le système d'exploitation par défaut a été <strong>totalement supprimé du démarrage automatique</strong>.</li>
+                <li>La puce <strong>ROM BIOS v2.4</strong> prend en charge le démarrage à chaud et teste tous les composants.</li>
+                <li>Si aucun média de boot n'est inséré, le message authentique <strong>« NON-SYSTEM DISK OR DISK ERROR »</strong> s'affiche.</li>
+              </ul>
+            </div>
+
+            {/* Carte 2: Ports USB 1, 2, 3 */}
+            <div className="p-4 bg-stone-900 border border-stone-800 rounded-xl space-y-3 text-xs text-stone-300">
+              <h4 className="font-bold text-amber-300 flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-amber-400" />
+                <span>Prise en charge de la Clé USB sur le Port 1, 2 ou 3</span>
+              </h4>
+              <p>
+                Le contrôleur hôte USB Hub offre 3 ports matériels indépendants. La clé de stockage contenant votre système peut être insérée dans <strong>n'importe lequel des trois ports</strong> :
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 font-mono text-[11px]">
+                <div className="p-2.5 bg-stone-950 border border-stone-800 rounded">
+                  <div className="font-bold text-emerald-400">Port USB 1</div>
+                  <div className="text-stone-400">Clavier ou Clé USB Bootable</div>
+                </div>
+                <div className="p-2.5 bg-stone-950 border border-stone-800 rounded">
+                  <div className="font-bold text-cyan-400">Port USB 2</div>
+                  <div className="text-stone-400">Souris ou Clé USB Bootable</div>
+                </div>
+                <div className="p-2.5 bg-stone-950 border border-stone-800 rounded">
+                  <div className="font-bold text-amber-400">Port USB 3</div>
+                  <div className="text-stone-400">Port Flash dédié ou Clé USB Bootable</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Carte 3: Tutoriel pas à pas */}
+            <div className="p-4 bg-stone-900 border border-stone-800 rounded-xl space-y-3 text-xs">
+              <h4 className="font-bold text-cyan-300 flex items-center gap-2">
+                <Play className="w-4 h-4 text-cyan-400" />
+                <span>Procédure pour Créer et Lancer votre Propre Système :</span>
+              </h4>
+              <ol className="list-decimal list-inside space-y-1.5 text-stone-300">
+                <li>Ouvrez l'<strong>Éditeur de Système d'Exploitation & Flasheur Clé USB</strong> (Bouton dans la barre supérieure ou touche <code className="text-emerald-300 font-mono">[F3]</code>).</li>
+                <li>Rédigez votre code source (instructions graphiques ou assembleur).</li>
+                <li>Cliquez sur <strong>« 1. Flasher sur la Clé USB »</strong> et choisissez le port d'insertion (Port 1, 2 ou 3).</li>
+                <li>Le BIOS détecte immédiatement le média et vous invite à presser <code className="text-emerald-300 font-mono">[ENTRÉE]</code>.</li>
+                <li>Le moteur pas-à-pas émet son bruit de lecture (<code className="text-amber-300 font-mono">chhk-chhk-krrr</code>), les octets sont chargés à <code className="text-emerald-300 font-mono">0x0000</code> et votre système s'exécute !</li>
+              </ol>
             </div>
           </div>
         )}

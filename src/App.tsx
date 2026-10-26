@@ -13,6 +13,9 @@ import {
   RotateCcw,
   Cpu,
   BookOpen,
+  Play,
+  Usb,
+  HardDrive,
 } from 'lucide-react';
 
 export default function App() {
@@ -30,8 +33,9 @@ export default function App() {
     setTick((t) => (t + 1) % 1000000);
   }, []);
 
-  // Boot de l'ordinateur virtuel au chargement
+  // Initialisation et démarrage matériel de l'ordinateur virtuel
   useEffect(() => {
+    computer.onDemandeEditeur = () => setIsStudioOpen(true);
     computer.demarrer();
     const timer = setTimeout(() => {
       computer.os.rafraichirBureau();
@@ -119,6 +123,8 @@ export default function App() {
     { vector: 4, name: 'Appels Système (Syscall)', addr: computer.cpu.memory.read(0x0004), irqName: 'SWI' },
   ];
 
+  const bootableUsb = computer.hubUsb.trouverCleBootable();
+
   return (
     <div className="min-h-screen bg-stone-950 text-stone-100 flex flex-col font-sans selection:bg-emerald-500/20 selection:text-emerald-200">
       {/* Barre supérieure épurée */}
@@ -137,59 +143,88 @@ export default function App() {
         <div className="hidden md:flex items-center gap-4 text-xs font-mono text-stone-400 whitespace-nowrap truncate">
           <span>
             État :{' '}
-            <strong className={computer.os.modeDemarrage === 'bios_vierge' ? 'text-amber-400 font-medium' : 'text-emerald-300 font-medium'}>
-              {computer.os.modeDemarrage === 'bios_vierge' ? 'ROM BIOS (Matériel Brut / Vierge)' : computer.os.modeDemarrage === 'hello_world' ? 'Programme Hello World' : 'B-OS v2.0 Chargé'}
+            <strong
+              className={
+                computer.os.modeDemarrage === 'bios_rom'
+                  ? 'text-amber-400 font-medium'
+                  : computer.os.modeDemarrage === 'bios_setup'
+                  ? 'text-cyan-400 font-medium'
+                  : 'text-emerald-300 font-medium'
+              }
+            >
+              {computer.os.modeDemarrage === 'bios_rom'
+                ? 'ROM BIOS v2.4 (POST / Mémoire Vierge)'
+                : computer.os.modeDemarrage === 'bios_setup'
+                ? 'BIOS CMOS Setup Utility'
+                : `Système Personnalisé: ${computer.os.nomOsActif || 'OS_PERSO'}`}
             </strong>
           </span>
           <span>·</span>
-          <span>VRAM : <strong className="text-stone-200">330×165 (5×7 Font)</strong></span>
+          <span>RAM : <strong className="text-stone-200">64 Ko (Zero 0x0000)</strong></span>
           <span>·</span>
-          <span>Signal : <strong className="text-emerald-400">100% Binaire</strong></span>
+          <span>VRAM : <strong className="text-emerald-400">330×165 Binaire</strong></span>
         </div>
 
         {/* Zone 3: Actions principales */}
         <div className="flex items-center gap-2.5 shrink-0">
-          {computer.os.modeDemarrage === 'bios_vierge' ? (
+          {computer.os.modeDemarrage === 'bios_rom' && (
             <div className="flex items-center gap-2">
+              {bootableUsb ? (
+                <button
+                  onClick={() => {
+                    computer.booterDepuisCle();
+                    forceUpdate();
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-stone-950 transition-all shadow-md animate-pulse whitespace-nowrap"
+                  title={`Démarrer le système "${bootableUsb.cle.nomSysteme}" depuis le Port USB ${bootableUsb.port}`}
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>Booter Clé USB (Port {bootableUsb.port})</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    computer.activerAccesDisque(300, 3);
+                    computer.os.tenterBootDepuisUsb();
+                    forceUpdate();
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-stone-800 hover:bg-stone-700 text-stone-300 border border-stone-700 transition-colors whitespace-nowrap"
+                  title="Rescanner les ports USB 1, 2 et 3 à la recherche d'un disque bootable"
+                >
+                  <Usb className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Rescanner Ports USB</span>
+                </button>
+              )}
+
               <button
                 onClick={() => {
-                  computer.os.verifierOuDeclencherAlerteSecurite('HELLO_WORLD', 'H', 'Charger Hello World', () => {
-                    computer.activerAccesDisque(350, 3);
-                    computer.os.chargerHelloWorld();
-                  });
+                  computer.os.ouvrirBiosSetup();
                   forceUpdate();
                 }}
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all whitespace-nowrap ${
-                  computer.os.alerteSecurite?.action === 'HELLO_WORLD'
-                    ? 'bg-amber-400 text-stone-950 border-amber-300 font-bold animate-pulse'
-                    : 'bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
-                }`}
-                title="Appuyez 2 fois sur [H] pour confirmer le chargement"
+                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 transition-colors whitespace-nowrap"
+                title="Accéder à la configuration CMOS BIOS"
               >
-                <span>{computer.os.alerteSecurite?.action === 'HELLO_WORLD' ? 'Confirmer [H] ?' : '[H] Hello World'}</span>
-              </button>
-              <button
-                onClick={() => {
-                  computer.os.verifierOuDeclencherAlerteSecurite('BOOT_BOS', 'B', 'Booter B-OS', () => {
-                    computer.activerAccesDisque(550, 5);
-                    computer.os.chargerOsBureau();
-                  });
-                  forceUpdate();
-                }}
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all whitespace-nowrap ${
-                  computer.os.alerteSecurite?.action === 'BOOT_BOS'
-                    ? 'bg-amber-400 text-stone-950 border-amber-300 font-bold animate-pulse'
-                    : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                }`}
-                title="Appuyez 2 fois sur [B] pour confirmer le démarrage de l'OS"
-              >
-                <span>{computer.os.alerteSecurite?.action === 'BOOT_BOS' ? 'Confirmer [B] ?' : '[B] Booter B-OS'}</span>
+                <span>[F2] Setup</span>
               </button>
             </div>
-          ) : (
+          )}
+
+          {computer.os.modeDemarrage === 'bios_setup' && (
             <button
               onClick={() => {
-                computer.os.verifierOuDeclencherAlerteSecurite('RESET_BIOS', 'ESC', 'Vider OS / Reset BIOS', () => {
+                computer.os.passerEnModeBiosVierge();
+                forceUpdate();
+              }}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 transition-colors whitespace-nowrap"
+            >
+              <span>[ESC] Quitter Setup</span>
+            </button>
+          )}
+
+          {computer.os.modeDemarrage === 'os_personnalise' && (
+            <button
+              onClick={() => {
+                computer.os.verifierOuDeclencherAlerteSecurite('RESET_BIOS', 'ESC', 'Retour au BIOS', () => {
                   computer.activerAccesDisque(250, 2);
                   computer.os.passerEnModeBiosVierge();
                 });
@@ -200,12 +235,23 @@ export default function App() {
                   ? 'bg-rose-500 text-white border-rose-400 font-bold animate-pulse'
                   : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/30'
               }`}
-              title="Appuyez 2 fois sur [ESC] pour réinitialiser la machine en mode brut"
+              title="Appuyez 2 fois sur [ESC] pour réinitialiser la machine et retourner au BIOS"
             >
-              <span>{computer.os.alerteSecurite?.action === 'RESET_BIOS' ? 'Confirmer [ESC] ?' : '[ESC] Vider OS'}</span>
+              <span>{computer.os.alerteSecurite?.action === 'RESET_BIOS' ? 'Confirmer [ESC] ?' : '[ESC] Quitter OS'}</span>
             </button>
           )}
 
+          {/* Bouton Éditeur & Flasheur Clé USB */}
+          <button
+            onClick={() => setIsStudioOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-stone-950 rounded-lg text-xs font-bold transition-colors shadow-sm whitespace-nowrap"
+            title="Écrire votre système et flasher sur la clé USB (Port 1, 2 ou 3)"
+          >
+            <Code className="w-3.5 h-3.5" />
+            <span>Éditeur & Flasher Clé USB</span>
+          </button>
+
+          {/* Guide et manuel */}
           <button
             onClick={() => {
               setSettingsInitialTab('guide');
@@ -218,14 +264,7 @@ export default function App() {
             <span>Manuel & Guide OS</span>
           </button>
 
-          <button
-            onClick={() => setIsStudioOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-stone-950 rounded-lg text-xs font-bold transition-colors shadow-sm whitespace-nowrap"
-          >
-            <Code className="w-3.5 h-3.5" />
-            <span>Studio Langages</span>
-          </button>
-
+          {/* Redémarrage matériel */}
           <button
             onClick={handleReset}
             title="Redémarrer l'ordinateur virtuel"
@@ -234,6 +273,7 @@ export default function App() {
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
 
+          {/* Menu ports & réglages */}
           <button
             onClick={() => {
               setSettingsInitialTab('ports');
@@ -242,7 +282,7 @@ export default function App() {
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-stone-800 hover:bg-stone-700 text-stone-200 hover:text-white rounded-lg border border-stone-700 transition-colors whitespace-nowrap"
           >
             <Sliders className="w-3.5 h-3.5 text-stone-400" />
-            <span>Menu & Ports & Code OS</span>
+            <span>Ports & Réglages</span>
           </button>
         </div>
       </header>
@@ -252,7 +292,7 @@ export default function App() {
         {/* 1. Écran Moniteur Virtuel CRT (330x165 natif, bezel épuré sans boutons) */}
         <PhysicalMonitor computer={computer} onRefresh={forceUpdate} />
 
-        {/* 2. Périphériques d'Entrée sur le Bureau : Clavier (USB 1) et Souris (USB 2) côte-à-côte */}
+        {/* 2. Périphériques d'Entrée sur le Bureau : Clavier et Souris côte-à-côte */}
         <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-12 gap-3 items-stretch">
           <div className="md:col-span-7 flex flex-col">
             <PhysicalKeyboard clavier={computer.clavier} onRefresh={forceUpdate} />
@@ -263,7 +303,7 @@ export default function App() {
         </div>
       </main>
 
-      {/* Studio de Langages & Compilateur d'Applications (Modal Drawer) */}
+      {/* Éditeur de Système d'Exploitation & Flasheur Clé USB */}
       <LanguageStudioDrawer
         computer={computer}
         isOpen={isStudioOpen}
@@ -271,7 +311,7 @@ export default function App() {
         onRefresh={forceUpdate}
       />
 
-      {/* Panneau Réglages (Tous les branchements de ports, Code Source de l'OS, CPU, RAM) */}
+      {/* Panneau Réglages (Ports E/S, CPU, RAM) */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -291,8 +331,6 @@ export default function App() {
         onRefresh={forceUpdate}
         initialTab={settingsInitialTab}
       />
-
-
     </div>
   );
 }

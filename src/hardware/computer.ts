@@ -10,10 +10,11 @@ import { VirtualComputer } from '../core/cpu';
 /**
  * Ordinateur Virtuel Matériel Complet
  * Assemble les périphériques physiques :
- * - 3 Ports USB : USB 1 (Clavier), USB 2 (Souris), USB 3 (Stockage Flash)
- * - 1 Port VGA vers le Moniteur (330 x 165 en signal binaire)
+ * - Hub USB à 3 ports physiques (Port 1, 2, 3) pouvant recevoir Clavier, Souris ou Clé USB Flash
+ * - 1 Port VGA vers le Moniteur CRT (330 x 165 en signal binaire)
  * - 1 Sortie Audio Jack 3.5mm avec synthétiseur physique
- * - Système d'Exploitation (B-OS) avec Studio de création
+ * - Vrai BIOS ROM matériel avec Power-On Self-Test (POST), vérification 64 KB RAM à zéro,
+ *   et bootloader USB multi-ports sans système de test préchargé
  */
 export class OrdinateurVirtuel {
   public moniteur: Moniteur;
@@ -34,6 +35,9 @@ export class OrdinateurVirtuel {
   private precedentClicDroit: boolean = false;
   private timerDisque: number | null = null;
 
+  // Callback pour ouvrir l'éditeur externe si demandé au clavier ([F3] ou [E])
+  public onDemandeEditeur?: () => void;
+
   constructor() {
     this.moniteur = new Moniteur(330, 165);
     this.vga = new ControleurVGA(330, 165);
@@ -43,13 +47,16 @@ export class OrdinateurVirtuel {
     this.audio = new SortieAudio();
     this.cpu = new VirtualComputer();
 
+    // Mémoire RAM initialisée strictement à zéro (aucun système de test)
+    this.cpu.reset(false);
+
     // Relie le câble VGA entre le contrôleur et le moniteur physique
     this.vga.connecterMoniteur(this.moniteur);
 
-    // Initialise le système d'exploitation
+    // Initialise le système d'exploitation et BIOS ROM
     this.os = new BinaryOS(this.vga, this.clavier, this.souris, this.hubUsb, this.audio);
 
-    // Liaisons d'interruption du clavier USB (Port 1)
+    // Liaisons d'interruption du clavier USB
     this.clavier.onInterruption = () => {
       this.audio.jouerSonTouche();
       const nomTouche = (this.clavier.dernierPaquet?.nomTouche || '').toUpperCase();
@@ -61,42 +68,31 @@ export class OrdinateurVirtuel {
         `Frappe '${this.clavier.dernierPaquet?.nomTouche}'`
       );
 
-      const isKeyB = nomTouche === 'B' || nomTouche === 'KEYB' || codeAscii === 66 || codeAscii === 98;
-      const isKeyH = nomTouche === 'H' || nomTouche === 'KEYH' || codeAscii === 72 || codeAscii === 104;
-      const isKeyR = nomTouche === 'R' || nomTouche === 'KEYR' || nomTouche === 'ESC' || nomTouche === 'ESCAPE' || codeAscii === 82 || codeAscii === 114 || codeAscii === 27;
+      const isEnter = nomTouche === 'ENTER' || nomTouche === 'ENTREE' || nomTouche === 'RETURN' || codeAscii === 13;
+      const isF2 = nomTouche === 'F2' || codeAscii === 113;
+      const isF3 = nomTouche === 'F3' || codeAscii === 114 || nomTouche === 'E';
+      const isEsc = nomTouche === 'ESC' || nomTouche === 'ESCAPE' || codeAscii === 27;
 
-      // Traitement sécurisé des touches critiques au niveau BIOS (Double-appui ou maintien requis)
-      if (this.os.modeDemarrage === 'bios_vierge') {
-        if (isKeyH) {
-          this.os.verifierOuDeclencherAlerteSecurite('HELLO_WORLD', 'H', 'Charger Hello World', () => {
-            this.activerAccesDisque(400, 4);
-            this.os.chargerHelloWorld();
-          });
+      if (this.os.modeDemarrage === 'bios_rom') {
+        if (isEnter) {
+          this.activerAccesDisque(450, 4);
+          this.os.tenterBootDepuisUsb();
           return;
-        } else if (isKeyB) {
-          this.os.verifierOuDeclencherAlerteSecurite('BOOT_BOS', 'B', 'Booter B-OS', () => {
-            this.activerAccesDisque(550, 5);
-            this.os.chargerOsBureau();
-          });
+        } else if (isF2) {
+          this.os.ouvrirBiosSetup();
+          return;
+        } else if (isF3 && this.onDemandeEditeur) {
+          this.onDemandeEditeur();
           return;
         }
-      } else if (this.os.modeDemarrage === 'hello_world') {
-        if (isKeyB) {
-          this.os.verifierOuDeclencherAlerteSecurite('BOOT_BOS', 'B', 'Booter B-OS', () => {
-            this.activerAccesDisque(550, 5);
-            this.os.chargerOsBureau();
-          });
-          return;
-        } else if (isKeyR) {
-          this.os.verifierOuDeclencherAlerteSecurite('RESET_BIOS', 'ESC', 'Retour BIOS', () => {
-            this.activerAccesDisque(250, 2);
-            this.os.passerEnModeBiosVierge();
-          });
+      } else if (this.os.modeDemarrage === 'bios_setup') {
+        if (isEsc || isEnter) {
+          this.os.passerEnModeBiosVierge();
           return;
         }
-      } else if (this.os.modeDemarrage === 'os_bureau') {
-        if (nomTouche === 'ESC' || nomTouche === 'ESCAPE' || codeAscii === 27) {
-          this.os.verifierOuDeclencherAlerteSecurite('RESET_BIOS', 'ESC', 'Vider OS / Reset BIOS', () => {
+      } else if (this.os.modeDemarrage === 'os_personnalise') {
+        if (isEsc) {
+          this.os.verifierOuDeclencherAlerteSecurite('RESET_BIOS', 'ESC', 'Retour au BIOS', () => {
             this.activerAccesDisque(250, 2);
             this.os.passerEnModeBiosVierge();
           });
@@ -107,7 +103,7 @@ export class OrdinateurVirtuel {
       this.os.rafraichirBureau();
     };
 
-    // Liaisons d'interruption de la souris USB (Port 2)
+    // Liaisons d'interruption de la souris USB
     this.souris.onInterruption = () => {
       if (this.souris.dernierPaquet) {
         this.hubUsb.enregistrerFlux(
@@ -116,7 +112,6 @@ export class OrdinateurVirtuel {
           `Souris X:${this.souris.x} Y:${this.souris.y}`
         );
 
-        // Détection de front montant des clics avec sons microswitch
         if (this.souris.clicGauche && !this.precedentClicGauche) {
           this.audio.jouerSonClicSouris(false);
           this.os.gererClicSouris(this.souris.x, this.souris.y);
@@ -128,7 +123,6 @@ export class OrdinateurVirtuel {
         this.precedentClicGauche = this.souris.clicGauche;
         this.precedentClicDroit = this.souris.clicDroit;
 
-        // Synchronisation directe des coordonnées avec l'OS
         this.os.sourisX = this.souris.x;
         this.os.sourisY = this.souris.y;
       }
@@ -137,7 +131,7 @@ export class OrdinateurVirtuel {
   }
 
   /**
-   * Simule l'accès physique à la mémoire / disque de stockage avec LED et moteur pas-à-pas
+   * Simule l'accès physique à la mémoire / clé USB avec LED et son moteur pas-à-pas
    */
   public activerAccesDisque(dureeMs: number = 300, pas: number = 3): void {
     this.disqueEnAcces = true;
@@ -151,6 +145,39 @@ export class OrdinateurVirtuel {
       this.disqueEnAcces = false;
       this.timerDisque = null;
     }, dureeMs);
+  }
+
+  /**
+   * Flashe le système personnalisé sur la clé USB et le branche sur le port désiré (1, 2 ou 3)
+   */
+  public flasherEtBrancherCleUsb(
+    nomSysteme: string,
+    codeSource: string,
+    port: 1 | 2 | 3 = 3
+  ): void {
+    this.activerAccesDisque(450, 4);
+    const prog = this.os.studio.compilerEnBinaire(codeSource, nomSysteme);
+    this.hubUsb.flasherSystemeSurCle(nomSysteme, codeSource, prog.octets, prog.bytecodeBinaire);
+    this.hubUsb.brancherCleSurPort(port);
+    this.os.rafraichirBureau();
+  }
+
+  /**
+   * Boot direct depuis la clé USB
+   */
+  public booterDepuisCle(): boolean {
+    this.activerAccesDisque(600, 5);
+    const res = this.os.tenterBootDepuisUsb();
+    if (res) {
+      // Inscription du bytecode dans la mémoire CPU pour synchronisation
+      const media = this.hubUsb.trouverCleBootable();
+      if (media && media.cle.bytecode.length > 0) {
+        for (let i = 0; i < media.cle.bytecode.length; i++) {
+          this.cpu.memory.write(0x0000 + i, media.cle.bytecode[i]);
+        }
+      }
+    }
+    return res;
   }
 
   /**
@@ -186,6 +213,7 @@ export class OrdinateurVirtuel {
 
   public redemarrer(): void {
     this.eteindre();
+    this.cpu.reset(false);
     setTimeout(() => {
       this.demarrer();
     }, 280);

@@ -63,7 +63,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   initialTab = 'ports',
 }) => {
   const [activeTab, setActiveTab] = useState<'ports' | 'os_code' | 'json_cpu' | 'cpu' | 'dbd' | 'memory' | 'disk' | 'guide'>(initialTab);
-  const [editedOsCode, setEditedOsCode] = useState<string>(ordinateur.os.codeSourceOS);
+  const [editedOsCode, setEditedOsCode] = useState<string>(
+    ordinateur.hubUsb.cleUsb.codeSource ||
+      `// SYSTEME D'EXPLOITATION VIRTUARCH
+CLEAR
+RECT 20, 20, 290, 125
+PRINT 40, 40, "SYSTEME PERSONNALISE ACTIF"
+PRINT 40, 58, "MEMOIRE RAM CHARGEE DEPUIS CLE USB"
+PRINT 40, 76, "PORTS 1, 2, 3 SUPPORTES"
+LINE 40, 94, 280, 94
+PRINT 40, 108, "VRAM 330x165 - TOUT EN BINAIRE"
+BEEP 660
+HALT`
+  );
   const [osFeedback, setOsFeedback] = useState<string | null>(null);
 
   React.useEffect(() => {
@@ -86,80 +98,48 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   ] as const;
 
   const handleApplyOsCode = () => {
-    ordinateur.os.rechargerCodeOS(editedOsCode);
-    setOsFeedback("Noyau OS rechargé et injecté avec succès !");
+    const port = ordinateur.hubUsb.cleUsb.port || 3;
+    ordinateur.flasherEtBrancherCleUsb('OS_PERSONNALISE', editedOsCode, port);
+    setOsFeedback(`Système flashé sur la Clé USB (Port ${port}) ! Cliquez sur Booter pour lancer.`);
     onRefresh();
-    setTimeout(() => setOsFeedback(null), 3000);
+    setTimeout(() => setOsFeedback(null), 3500);
   };
 
   const loadOsTemplate = (type: 'standard' | 'hello' | 'couleurs') => {
     let code = '';
     if (type === 'hello') {
       code = `// ==========================================
-// NOYAU B-OS : PROGRAMME MINIMAL "HELLO WORLD"
+// PROGRAMME MINIMAL "HELLO WORLD"
 // ==========================================
-// Ce programme affiche un message de bienvenue en binaire
-// sur l'écran virtuel 330x165 et joue un son matériel.
-
-INIT_OS:
-  CLEAR_SCREEN              // 0b00000101
-  SET_COLOR 0b0011          // Cyan Rétro
-  DRAW_BOX 40, 40, 250, 80   // Rectangle de fenêtre
-
-  SET_COLOR 0b0001          // Vert Phosphore
-  PRINT 60, 60, "HELLO WORLD !"
-  PRINT 60, 75, "SYSTEME D'EXPLOITATION VIRTUEL B-OS"
-  PRINT 60, 90, "100% BINAIRE - MONITEUR 330x165"
-
-  BEEP 880                  // Bip sonore 880 Hz
-  HALT                      // Fin de boot
+CLEAR
+PRINT 60, 60, "HELLO WORLD !"
+PRINT 60, 78, "100% BINAIRE - MONITEUR 330x165"
+BEEP 880
+HALT
 `;
     } else if (type === 'couleurs') {
       code = `// ==========================================
-// NOYAU B-OS : DEMONSTRATION PALETTE COULEURS
+// DEMONSTRATION PALETTE COULEURS
 // ==========================================
-// Affiche les 16 nuances de la palette binaire 4-bits
-
-INIT_PALETTE_TEST:
-  CLEAR_SCREEN
-  PRINT 10, 10, "=== TEST PALETTE BINAIRE 16 COULEURS ==="
-
-  DRAW_COLOR_BAR 0b0001, "0b0001 VERT PHOSPHORE"
-  DRAW_COLOR_BAR 0b0010, "0b0010 AMBRE CHAUD"
-  DRAW_COLOR_BAR 0b0011, "0b0011 CYAN RETRO"
-  DRAW_COLOR_BAR 0b0100, "0b0100 BLANC PAPIER"
-  DRAW_COLOR_BAR 0b0101, "0b0101 ROUGE ALERTE"
-  DRAW_COLOR_BAR 0b0110, "0b0110 JAUNE ELECTRIQUE"
-  DRAW_COLOR_BAR 0b0111, "0b0111 MAGENTA NEON"
-  DRAW_COLOR_BAR 0b1000, "0b1000 BLEU COBALT"
-
-  PRINT 10, 140, "TOUT EST CALCULE EN BINAIRE SUR VRAM 330x165"
+CLEAR
+PRINT 20, 20, "TEST GRAPHIQUE 16 COULEURS"
+RECT 20, 35, 290, 60
+LINE 20, 110, 310, 110
+BEEP 440
+HALT
 `;
     } else {
       code = `// ==========================================
-// NOYAU B-OS v2.0 - ARCHITECTURE 100% BINAIRE
+// SYSTEME D'EXPLOITATION GRAPHIQUE
 // ==========================================
-// Pilotes matériels : Port USB 1 (Clavier), USB 2 (Souris), USB 3 (Flash)
-// Affichage : VRAM 330x165 - Palette Binaire 16 Couleurs (0b0000 - 0b1111)
-
-BOOT_SEQUENCE:
-  0b00000001  // INIT_SUBSYSTEM_VGA_330X165
-  0b00000010  // MOUNT_USB_HUB_PORTS_1_2_3
-  0b00000011  // LOAD_DESKTOP_WINDOW_MANAGER
-  0b00000100  // ENABLE_INTERRUPTS_IRQ0_IRQ1_IRQ2
-
-UI_DESKTOP_STYLE:
-  COLOR_BAR_TITLE = 0b0011     // Cyan Rétro
-  COLOR_TEXT_MAIN = 0b0001     // Vert Phosphore
-  COLOR_ACCENT    = 0b0010     // Ambre Chaud
-  COLOR_HIGHLIGHT = 0b1011     // Blanc Curseur
-
-LOOP:
-  WAIT_FOR_EVENT
-  HANDLE_USB_MOUSE_COORDS
-  HANDLE_USB_KEYBOARD_SCANCODE
-  REFRESH_VRAM_DISPLAY
-  JUMP LOOP
+CLEAR
+RECT 10, 10, 310, 145
+PRINT 30, 30, "SYSTEME D'EXPLOITATION VIRTUEL"
+PRINT 30, 50, "INITIALISE DEPUIS LA CLE USB"
+LINE 30, 70, 290, 70
+PRINT 30, 85, "PILOTES USB 1, 2, 3 CHARGES"
+BEEP 520
+HALT
 `;
     }
     setEditedOsCode(code);
@@ -301,38 +281,72 @@ LOOP:
                   </div>
                 </div>
 
-                {/* Port USB 3 : Clé Flash */}
+                {/* Port USB : Clé Flash & Bootloader */}
                 <div className="p-4 bg-stone-900 border border-stone-800 rounded-xl space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-stone-100 font-bold text-xs">
                       <Usb className="w-4 h-4 text-amber-400" />
-                      <span>PORT USB 3 : CLÉ FLASH & STOCKAGE</span>
+                      <span>CLÉ USB FLASH (BOOT SUR PORT 1, 2 OU 3)</span>
                     </div>
                     <span className={`text-[11px] px-2 py-0.5 rounded font-mono ${ordinateur.hubUsb.cleUsb.estBranchee ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'bg-stone-800 text-stone-400'}`}>
-                      {ordinateur.hubUsb.cleUsb.estBranchee ? 'CONNECTEE' : 'ABSENTE'}
+                      {ordinateur.hubUsb.cleUsb.estBranchee
+                        ? `PORT USB ${ordinateur.hubUsb.cleUsb.port} · ${ordinateur.hubUsb.cleUsb.estBootable ? 'BOOTABLE' : 'VIERGE'}`
+                        : 'EJECTEE / ABSENTE'}
                     </span>
                   </div>
                   <p className="text-xs text-stone-400">
-                    Permet d'importer et sauvegarder des fichiers binaires (.bin) et du code d'application.
+                    Contient votre code binaire personnalisé compilé. Peut être branchée sur le Port 1, 2 ou 3 pour booter.
                   </p>
-                  <div className="flex items-center justify-between pt-2">
-                    <span className="text-[11px] font-mono text-stone-400">
-                      Fichiers : <strong className="text-amber-300">{ordinateur.hubUsb.cleUsb.fichiers.length} fichiers</strong>
-                    </span>
-                    <button
-                      onClick={() => {
-                        ordinateur.hubUsb.basculerPort(3);
-                        ordinateur.os.rafraichirBureau();
-                        onRefresh();
-                      }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                        ordinateur.hubUsb.cleUsb.estBranchee
-                          ? 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30'
-                          : 'bg-amber-500 hover:bg-amber-400 text-stone-950'
-                      }`}
-                    >
-                      {ordinateur.hubUsb.cleUsb.estBranchee ? 'Éjecter la Clé USB' : 'Insérer la Clé USB'}
-                    </button>
+                  <div className="space-y-2 pt-1">
+                    <div className="flex items-center justify-between text-[11px] font-mono text-stone-400">
+                      <span>Système : <strong className="text-amber-300">{ordinateur.hubUsb.cleUsb.nomSysteme || 'Aucun'}</strong></span>
+                      <span>Taille : <strong className="text-emerald-300">{ordinateur.hubUsb.cleUsb.tailleOctets} octets</strong></span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <span className="text-[11px] text-stone-400">Emplacement :</span>
+                      {([1, 2, 3] as const).map((p) => (
+                        <button
+                          key={p}
+                          onClick={() => {
+                            ordinateur.hubUsb.brancherCleSurPort(p);
+                            ordinateur.os.rafraichirBureau();
+                            onRefresh();
+                          }}
+                          className={`px-2 py-1 rounded text-xs font-mono transition-colors ${
+                            ordinateur.hubUsb.cleUsb.estBranchee && ordinateur.hubUsb.cleUsb.port === p
+                              ? 'bg-amber-500 text-stone-950 font-bold'
+                              : 'bg-stone-950 border border-stone-800 text-stone-400 hover:text-white'
+                          }`}
+                        >
+                          Port {p}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => {
+                          ordinateur.hubUsb.debrancherCle();
+                          ordinateur.os.rafraichirBureau();
+                          onRefresh();
+                        }}
+                        className="px-2 py-1 rounded text-xs font-mono bg-stone-950 border border-stone-800 text-stone-400 hover:text-rose-400 transition-colors"
+                      >
+                        Éjecter
+                      </button>
+
+                      {ordinateur.hubUsb.cleUsb.estBootable && ordinateur.hubUsb.cleUsb.estBranchee && (
+                        <button
+                          onClick={() => {
+                            ordinateur.booterDepuisCle();
+                            onClose();
+                            onRefresh();
+                          }}
+                          className="ml-auto px-2.5 py-1 rounded text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-stone-950 transition-colors flex items-center gap-1"
+                        >
+                          <Play className="w-3 h-3 fill-current" />
+                          <span>Booter</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
 

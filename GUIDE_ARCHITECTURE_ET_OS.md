@@ -470,12 +470,66 @@ Pour offrir une expérience rétro-computing authentique, VirtuArch intègre des
 
 ---
 
-## Résumé des Raccourcis & Commandes Sécurisées
-* **Double-Frappe [B] (ou maintien)** : Démarrer et booter le système d'exploitation complet (B-OS v2.0).
-* **Double-Frappe [H] (ou maintien)** : Injecter le programme minimaliste "Hello World" en binaire.
-* **Double-Frappe [ESC] (ou maintien)** : Réinitialiser la mémoire vive et repasser en mode ROM BIOS matériel brut.
-* **Bouton DÉMAG** : Démagnétiser le moniteur CRT (bruit de bobine 50Hz + oscillation magnétique).
-* **Bouton PHOSPHORE** : Basculer entre RGB Binaire, Vert P1, Ambre P3 et Blanc P4.
+## 11. Vrai BIOS ROM, Mémoire Vierge (0x0000) et Bootloader USB Multi-Ports (Ports 1, 2, 3)
+
+### 11.1. Philosophie du Matériel Brut et Mémoire Vierge
+Dans un véritable ordinateur personnel classique (type IBM PC / AT ou station RISC), **aucun système d'exploitation de test n'est préchargé en mémoire vive (RAM)** à la sortie d'usine.
+* **Toute la mémoire vive (64 Ko / 0x0000 à 0xFFFF) est initialisée strictement à zéro (`0x00000000`).**
+* La puce **ROM BIOS** contient uniquement le firmware de base :
+  1. Le **Power-On Self-Test (POST)** : vérification du processeur RISC 8-Bit, test de mémoire vive 64 Ko, détection du contrôleur vidéo VGA 330×165 et du synthétiseur audio.
+  2. L'inventaire du contrôleur hôte **USB Hub à 3 ports matériels (Port 1, 2 et 3)**.
+  3. Le **Bootloader de recherche de média bootable** : le BIOS balaie successivement les ports USB 1, 2 et 3 pour détecter une clé USB contenant un secteur de boot exécutable (`BOOT.BIN` / `KERNEL.SYS`).
+
+### 11.2. Comportement en l'absence de Clé Bootable
+Si aucun système personnalisé n'a été inséré sur les ports USB 1, 2 ou 3 :
+* Le BIOS affiche l'écran de diagnostic POST complet :
+  ```
+  VIRTUARCH HARDWARE BIOS v2.4 (C) 1984-2026
+  CPU  : 8-BIT RISC ARCHITECTURE @ 20.00 MHz ......... [OK]
+  RAM  : 64 KB (0000h - FFFFh) CHECK: ALL ZERO 0x00 .. [OK]
+  VGA  : VRAM 330x165 16-COLOR MATRIX ADAPTER ....... [OK]
+  SND  : 1-CHANNEL AUDIO SYNTHESIZER 3.5mm JACK ...... [OK]
+  USB  : SCANNING PORTS 1, 2, 3 FOR BOOTABLE MEDIA...
+  P1: CLAVIER | P2: SOURIS | P3: LIBRE
+  ```
+* Suivi du message authentique d'erreur de disque :
+  ```
+  BOOT FAILURE : NON-SYSTEM DISK OR DISK ERROR
+  AUCUN DISQUE BOOTABLE DETECTE DANS LES PORTS USB 1, 2 OU 3
+  Memoire RAM = 0x0000 (Vierge). Aucun systeme precharge.
+  ```
+
+### 11.3. Workflow de Création et de Boot d'un OS Personnalisé
+1. **Écriture du Système :** Ouvrez l'**Éditeur de Système d'Exploitation & Flasheur Clé USB** (Touche `[F3]` ou bouton dans la barre supérieure).
+2. **Compilation Binaire :** Rédigez vos instructions (ex: `CLEAR`, `RECT`, `PRINT`, `LINE`, `PIXEL`, `BEEP`, `HALT` ou instructions Assembleur CPU).
+3. **Flashage sur la Clé USB :** Cliquez sur **« 1. Flasher sur la Clé USB »** pour encoder le bytecode machine et le graver sur la clé de stockage virtuelle.
+4. **Choix du Port USB :** Sélectionnez le port physique dans lequel insérer la clé :
+   * **Port USB 1**
+   * **Port USB 2**
+   * **Port USB 3**
+5. **Démarrage (Boot) :**
+   * Appuyez sur **`[ENTRÉE]`** au clavier ou cliquez sur **« Booter Clé USB (Port X) »**.
+   * Le BIOS fait retentir le bruit mécanique de lecture tête de disque (*« chhk-chhk-krrr »*) avec illumination de la LED ambre HDD.
+   * Les octets binaires sont transférés directement en RAM à partir de l'adresse `0x0000`.
+   * Le processeur saute à `PC = 0x0000` et votre propre système d'exploitation s'exécute sur l'écran !
+6. **Retour au BIOS :** Appuyez sur **`[ESC]`** à tout moment pour revenir à la ROM BIOS.
+
+### 11.4. Utilitaire BIOS CMOS Setup Utility ([F2])
+En appuyant sur `[F2]` lors du POST, vous accédez à l'utilitaire classique bleu/ambre CMOS Setup :
+* Ordre de priorité de boot : Port USB 1 → Port USB 2 → Port USB 3.
+* Contrôle de la fréquence CPU (20.00 MHz) et de l'état mémoire à zéro.
+* Diagnostic détaillé des périphériques connectés.
+
+---
+
+## Résumé des Raccourcis Clavier & Commandes Matérielles
+* **`[ENTRÉE]`** : Rescanner les ports USB 1, 2, 3 et booter la clé USB si présente.
+* **`[F2]`** : Ouvrir l'utilitaire **BIOS CMOS Setup Utility**.
+* **`[F3]` ou `[E]`** : Ouvrir l'**Éditeur de Système d'Exploitation & Flasheur Clé USB**.
+* **Double-Frappe `[ESC]` (ou maintien)** : Quitter le système personnalisé et réinitialiser en mode BIOS ROM.
+* **Bouton DÉMAG** : Démagnétiser le moniteur CRT (bobine 50Hz + flash d'électrons).
+* **Bouton PHOSPHORE** : Basculer entre 16 Couleurs RGB, Vert P1, Ambre P3 et Blanc P4.
 * **Bouton SCAN** : Activer ou désactiver les lignes de balayage cathodique (Scanlines).
-* **Menu « Ports & Code OS »** : Configuration des câbles USB 1, USB 2, USB 3, VGA, code source de l'OS, inspecteur de CPU et formatage de disque.
+* **Menu « Ports & Réglages »** : Configuration avancée des ports USB 1, 2, 3, VGA, mémoire vive hexadécimale et registres CPU.
+
 

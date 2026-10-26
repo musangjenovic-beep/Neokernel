@@ -78,9 +78,14 @@ export class VirtualMemory {
     this.reset();
   }
 
-  public reset(): void {
+  public reset(initDbd: boolean = false): void {
     this.ram.fill(0);
-    this.initDbdHeader();
+    if (initDbd) {
+      this.initDbdHeader();
+    } else {
+      this.stats.rootIndex = -1;
+      this.stats.count = 0;
+    }
     this.stats.lookupsCount = 0;
     this.stats.lastLookupKey = null;
     this.stats.lastLookupSteps = 0;
