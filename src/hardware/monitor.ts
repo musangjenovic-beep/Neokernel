@@ -52,6 +52,7 @@ export class Moniteur {
   public framebuffer: ImageData | null = null;
   public data: Uint8ClampedArray | null = null;
   public videoMemory: Uint8Array[] | null = null; // Reçoit le signal vidéo brut
+  public curseur: { x: number; y: number } | null = null; // Curseur matériel overlay (hors VRAM)
   public theme: PhosphorTheme = 'green';
   public modeCouleur: ModeCouleur = 'couleur_binaire'; // Par défaut, affichage des couleurs binaires
   public isConnected: boolean = true; // Câble VGA branché ou non
@@ -75,9 +76,10 @@ export class Moniteur {
     }
   }
 
-  // Reçoit le signal vidéo du contrôleur VGA
-  public recevoirSignal(vram: Uint8Array[]): void {
+  // Reçoit le signal vidéo du contrôleur VGA ainsi que la position du curseur matériel
+  public recevoirSignal(vram: Uint8Array[], curseur: { x: number; y: number } | null = null): void {
     this.videoMemory = vram;
+    this.curseur = curseur;
   }
 
   public setPixel(x: number, y: number, r: number, g: number, b: number): void {
@@ -154,7 +156,39 @@ export class Moniteur {
       }
     }
 
+    // Rendu du curseur matériel par-dessus l'image (garantit zéro traînée / aucun résidu dans la VRAM)
+    if (this.curseur && this.curseur.x >= 0 && this.curseur.y >= 0) {
+      this.dessinerCurseurOverlay(this.curseur.x, this.curseur.y);
+    }
+
     this.ctx.putImageData(this.framebuffer, 0, 0);
+  }
+
+  /**
+   * Trace le curseur de souris matériel directement dans le tampon d'affichage
+   */
+  private dessinerCurseurOverlay(mx: number, my: number): void {
+    const curseur = [
+      [1, 0, 0, 0, 0],
+      [1, 1, 0, 0, 0],
+      [1, 1, 1, 0, 0],
+      [1, 1, 1, 1, 0],
+      [1, 1, 1, 0, 0],
+      [1, 0, 1, 1, 0],
+      [0, 0, 0, 1, 1],
+    ];
+
+    for (let r = 0; r < curseur.length; r++) {
+      const py = my + r;
+      if (py >= 0 && py < this.rows) {
+        for (let c = 0; c < curseur[r].length; c++) {
+          const px = mx + c;
+          if (px >= 0 && px < this.cols && curseur[r][c] === 1) {
+            this.setPixel(px, py, 255, 255, 255);
+          }
+        }
+      }
+    }
   }
 
   private dessinerMireDeconnectee(): void {

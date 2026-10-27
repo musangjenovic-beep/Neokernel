@@ -28,17 +28,84 @@ export const LanguageStudioDrawer: React.FC<LanguageStudioDrawerProps> = ({
   const studio = computer.os.studio;
   const [sourceCode, setSourceCode] = useState<string>(
     `// ==========================================
-// MON SYSTEME D'EXPLOITATION PERSONNALISE
+// SYSTEME D'EXPLOITATION INTERACTIF (RGB 330x165)
 // ==========================================
-CLEAR
-RECT 15, 15, 300, 135
-PRINT 35, 35, "MON SYSTEME PERSONNALISE EST BOOTE !"
-PRINT 35, 52, "CHARGE DEPUIS LA CLE USB EN RAM 0x0000"
-PRINT 35, 70, "AFFICHAGE DIRECT SUR MONITEUR 330x165"
-LINE 35, 88, 295, 88
-PRINT 35, 100, "TOUT FONCTIONNE EN BINAIRE PUR"
-BEEP 520
-HALT`
+CLEAR 0
+COLOR 3
+
+// 1. Sous-routines de dessin initial (CALL / RET)
+CALL DESSINER_BUREAU
+CALL DESSINER_FENETRE
+CALL DESSINER_BOUTONS
+SOUND 5
+
+// 2. Boucle Interactive temps réel (30 FPS)
+BOUCLE_EVENEMENTS:
+  WAIT 30
+
+  // Détection des clics sur les boutons de l'écran
+  IF_CLICK 35, 105, 75, 20, ACTION_AUDIO
+  IF_CLICK 120, 105, 85, 20, ACTION_REBOOT
+  IF_CLICK 215, 105, 85, 20, ACTION_SHUTDOWN
+
+  // Raccourcis clavier
+  IF_KEY "1", ACTION_AUDIO
+  IF_KEY "R", ACTION_REBOOT
+  IF_KEY "S", ACTION_SHUTDOWN
+
+  GOTO BOUCLE_EVENEMENTS
+
+// 3. Actions déclenchées
+ACTION_AUDIO:
+  SOUND 3
+  PRINT 35, 130, ">> Bouton Audio clique avec succes !", 14
+  WAIT 200
+  PRINT 35, 130, "                                    ", 0
+  GOTO BOUCLE_EVENEMENTS
+
+ACTION_REBOOT:
+  PRINT 35, 130, ">> Redemarrage du PC en cours...", 12
+  SOUND 4
+  WAIT 300
+  REBOOT
+
+ACTION_SHUTDOWN:
+  PRINT 35, 130, ">> Extinction du PC...", 5
+  WAIT 300
+  SHUTDOWN
+
+// 4. Définition des sous-routines (Groupes de commandes)
+DESSINER_BUREAU:
+  FILLRECT 0, 0, 330, 12, 8
+  PRINT 6, 2, "VIRTUARCH OS v3.5 [BOUTONS & ANIMATION]", 15
+  PRINT 240, 2, "MEM: 64Ko OK", 14
+  RET
+
+DESSINER_FENETRE:
+  FILLRECT 20, 22, 290, 125, 10
+  RECT 20, 22, 290, 125, 3
+  FILLRECT 20, 22, 290, 14, 3
+  PRINT 26, 24, "TABLEAU DE BORD DU SYSTEME", 0
+
+  PRINT 35, 42, "ESPACES CLIQUABLES & GROUPES DE COMMANDES :", 15
+  PRINT 35, 56, "-> Cliquez avec la souris sur les boutons ci-dessous !", 6
+  PRINT 35, 68, "-> Touches directes : [1] Son, [R] Reboot, [S] Eteindre", 14
+  PRINT 35, 80, "-> Code organise en sous-routines avec CALL et RET", 1
+  RET
+
+DESSINER_BOUTONS:
+  FILLRECT 35, 105, 75, 20, 2
+  RECT 35, 105, 75, 20, 15
+  PRINT 42, 111, "[1] AUDIO", 0
+
+  FILLRECT 120, 105, 85, 20, 12
+  RECT 120, 105, 85, 20, 15
+  PRINT 126, 111, "[R] REBOOT", 0
+
+  FILLRECT 215, 105, 85, 20, 5
+  RECT 215, 105, 85, 20, 15
+  PRINT 222, 111, "[S] ETEINDRE", 15
+  RET`
   );
   const [appName, setAppName] = useState<string>('MON_OS_PERSO');
   const [ciblePortUsb, setCiblePortUsb] = useState<1 | 2 | 3>(

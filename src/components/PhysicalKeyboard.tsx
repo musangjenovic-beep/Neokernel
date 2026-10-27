@@ -16,7 +16,7 @@ export const PhysicalKeyboard: React.FC<PhysicalKeyboardProps> = ({ clavier, onR
       if (['TEXTAREA', 'INPUT'].includes((e.target as HTMLElement)?.tagName)) {
         return;
       }
-      if (e.key === 'F5' || e.key === 'F12' || (e.ctrlKey && e.key.toLowerCase() === 'r')) {
+      if (e.key === 'F5' || (e.ctrlKey && e.key.toLowerCase() === 'r')) {
         return;
       }
       e.preventDefault();
@@ -26,6 +26,10 @@ export const PhysicalKeyboard: React.FC<PhysicalKeyboardProps> = ({ clavier, onR
       if (e.key.length === 1) {
         nom = e.key.toUpperCase();
         code = nom.charCodeAt(0);
+      } else if (/^F[1-9]$|^F1[0-2]$/i.test(e.key)) {
+        nom = e.key.toUpperCase();
+        const fNum = parseInt(nom.substring(1), 10);
+        code = 111 + fNum; // F1 = 112, F2 = 113, ..., F12 = 123
       }
 
       clavier.frapperTouche(code, nom);
@@ -45,9 +49,33 @@ export const PhysicalKeyboard: React.FC<PhysicalKeyboardProps> = ({ clavier, onR
     onRefresh();
   };
 
-  const KEYBOARD_ROWS = [
+  interface KeyDef {
+    label: string;
+    code: number;
+    wide?: boolean;
+    isFunction?: boolean;
+    highlight?: boolean;
+  }
+
+  const KEYBOARD_ROWS: KeyDef[][] = [
+    // Ligne des Touches de Fonction (F1 à F12 + ESC)
     [
-      { label: 'ESC', code: 27 },
+      { label: 'ESC', code: 27, isFunction: true },
+      { label: 'F1', code: 112, isFunction: true },
+      { label: 'F2', code: 113, isFunction: true, highlight: true }, // BIOS Setup
+      { label: 'F3', code: 114, isFunction: true, highlight: true }, // Éditeur OS
+      { label: 'F4', code: 115, isFunction: true },
+      { label: 'F5', code: 116, isFunction: true },
+      { label: 'F6', code: 117, isFunction: true },
+      { label: 'F7', code: 118, isFunction: true },
+      { label: 'F8', code: 119, isFunction: true },
+      { label: 'F9', code: 120, isFunction: true },
+      { label: 'F10', code: 121, isFunction: true },
+      { label: 'F11', code: 122, isFunction: true },
+      { label: 'F12', code: 123, isFunction: true },
+    ],
+    // Ligne des Chiffres
+    [
       { label: '1', code: 49 },
       { label: '2', code: 50 },
       { label: '3', code: 51 },
@@ -58,10 +86,11 @@ export const PhysicalKeyboard: React.FC<PhysicalKeyboardProps> = ({ clavier, onR
       { label: '8', code: 56 },
       { label: '9', code: 57 },
       { label: '0', code: 48 },
-      { label: '⌫', code: 8 },
+      { label: '⌫', code: 8, wide: true },
     ],
+    // Ligne QWERTY 1
     [
-      { label: 'TAB', code: 9 },
+      { label: 'TAB', code: 9, wide: true },
       { label: 'Q', code: 81 },
       { label: 'W', code: 87 },
       { label: 'E', code: 69 },
@@ -73,6 +102,7 @@ export const PhysicalKeyboard: React.FC<PhysicalKeyboardProps> = ({ clavier, onR
       { label: 'O', code: 79 },
       { label: 'P', code: 80 },
     ],
+    // Ligne QWERTY 2
     [
       { label: 'A', code: 65 },
       { label: 'S', code: 83 },
@@ -85,6 +115,7 @@ export const PhysicalKeyboard: React.FC<PhysicalKeyboardProps> = ({ clavier, onR
       { label: 'L', code: 76 },
       { label: 'ENTRÉE', code: 13, wide: true },
     ],
+    // Ligne QWERTY 3 + Flèches directionnelles
     [
       { label: 'Z', code: 90 },
       { label: 'X', code: 88 },
@@ -122,8 +153,8 @@ export const PhysicalKeyboard: React.FC<PhysicalKeyboardProps> = ({ clavier, onR
         </div>
       </div>
 
-      {/* Matrice de Touches */}
-      <div className="p-2 sm:p-2.5 bg-stone-950 border border-stone-800 rounded-lg space-y-1.5 shadow-inner flex-1 flex flex-col justify-center">
+      {/* Matrice de Touches avec Rangée F1..F12 */}
+      <div className="p-2 sm:p-2.5 bg-stone-950 border border-stone-800 rounded-lg space-y-1 sm:space-y-1.5 shadow-inner flex-1 flex flex-col justify-center">
         {KEYBOARD_ROWS.map((row, rIdx) => (
           <div key={rIdx} className="flex gap-1 sm:gap-1.5 justify-center">
             {row.map((k) => {
@@ -133,12 +164,16 @@ export const PhysicalKeyboard: React.FC<PhysicalKeyboardProps> = ({ clavier, onR
                   key={k.label}
                   disabled={!clavier.estBranche}
                   onClick={() => triggerKey(k.label, k.code)}
-                  className={`px-1 sm:px-2 py-1.5 rounded text-[11px] sm:text-xs font-mono font-medium transition-all shadow ${
+                  className={`rounded font-mono font-medium transition-all shadow ${
                     isPressed
                       ? 'bg-emerald-400 text-stone-950 translate-y-0.5 font-bold shadow-none'
+                      : k.isFunction
+                      ? k.highlight
+                        ? 'min-w-[20px] sm:min-w-[23px] h-6 sm:h-7 px-1 text-[9px] sm:text-[10px] bg-stone-850 hover:bg-stone-800 text-emerald-400 border border-emerald-500/40 active:translate-y-0.5'
+                        : 'min-w-[19px] sm:min-w-[22px] h-6 sm:h-7 px-1 text-[9px] sm:text-[10px] bg-stone-900 hover:bg-stone-800 text-stone-400 border border-stone-800 active:translate-y-0.5'
                       : k.wide
-                      ? 'flex-1 max-w-[85px] bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 active:translate-y-0.5'
-                      : 'w-7 sm:w-8 h-8 sm:h-8.5 bg-stone-900 hover:bg-stone-800 text-stone-300 border border-stone-800 hover:border-stone-700 active:translate-y-0.5'
+                      ? 'flex-1 max-w-[85px] h-7 sm:h-8 py-1 px-1 sm:px-2 text-[10px] sm:text-xs bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 active:translate-y-0.5'
+                      : 'w-7 sm:w-8 h-7 sm:h-8 px-1 py-1 text-[11px] sm:text-xs bg-stone-900 hover:bg-stone-800 text-stone-300 border border-stone-800 hover:border-stone-700 active:translate-y-0.5'
                   } disabled:opacity-30 disabled:pointer-events-none`}
                 >
                   {k.label}

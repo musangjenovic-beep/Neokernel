@@ -14,6 +14,9 @@ export class ControleurVGA {
   public moniteur: Moniteur | null = null;
   public estConnecte: boolean = true; // Câble physique VGA branché
   public frameCount: number = 0;
+  public curseurX: number = -1; // Position X matérielle du curseur (overlay DAC)
+  public curseurY: number = -1; // Position Y matérielle du curseur
+  public curseurVisible: boolean = true;
 
   constructor(cols: number = 330, rows: number = 165) {
     this.cols = cols;
@@ -79,6 +82,67 @@ export class ControleurVGA {
         if (plein || px === startX || px === endX - 1 || py === startY || py === endY - 1) {
           this.vram[py][px] = val;
         }
+      }
+    }
+  }
+
+  public dessinerRectanglePlein(
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    couleurBinaire: number = 0b0001
+  ): void {
+    this.dessinerRect(x, y, w, h, couleurBinaire, true);
+  }
+
+  public dessinerCercle(
+    xc: number,
+    yc: number,
+    r: number,
+    couleurBinaire: number = 0b0001,
+    plein: boolean = false
+  ): void {
+    const val = couleurBinaire & 0x0f;
+    let x = 0;
+    let y = Math.floor(Math.abs(r));
+    let d = 3 - 2 * y;
+
+    const plot = (px: number, py: number) => {
+      this.setPixel(px, py, val);
+    };
+
+    const drawSpan = (yLine: number, xStart: number, xEnd: number) => {
+      const minX = Math.min(xStart, xEnd);
+      const maxX = Math.max(xStart, xEnd);
+      for (let ix = minX; ix <= maxX; ix++) {
+        this.setPixel(ix, yLine, val);
+      }
+    };
+
+    while (y >= x) {
+      if (plein) {
+        drawSpan(yc + y, xc - x, xc + x);
+        drawSpan(yc - y, xc - x, xc + x);
+        drawSpan(yc + x, xc - y, xc + y);
+        drawSpan(yc - x, xc - y, xc + y);
+      } else {
+        plot(xc + x, yc + y);
+        plot(xc - x, yc + y);
+        plot(xc + x, yc - y);
+        plot(xc - x, yc - y);
+        plot(xc + y, yc + x);
+        plot(xc - y, yc + x);
+        plot(xc + y, yc - x);
+        plot(xc - y, yc - x);
+      }
+
+      x++;
+      if (d > 0) {
+        y--;
+        d = d + 4 * (x - y) + 10;
+      } else {
+        d = d + 4 * x + 6;
       }
     }
   }
@@ -176,38 +240,28 @@ export class ControleurVGA {
   }
 
   /**
-   * Dessine la flèche du curseur souris à l'écran (5x7)
+   * Positionne le curseur de souris matériel (géré en calque overlay matériel sans altérer la VRAM)
    */
   public dessinerCurseurSouris(mx: number, my: number): void {
-    const curseur = [
-      [1, 0, 0, 0, 0],
-      [1, 1, 0, 0, 0],
-      [1, 1, 1, 0, 0],
-      [1, 1, 1, 1, 0],
-      [1, 1, 1, 0, 0],
-      [1, 0, 1, 1, 0],
-      [0, 0, 0, 1, 1],
-    ];
+    this.curseurX = Math.floor(mx);
+    this.curseurY = Math.floor(my);
+    this.curseurVisible = true;
+  }
 
-    for (let r = 0; r < curseur.length; r++) {
-      const py = my + r;
-      if (py >= 0 && py < this.rows) {
-        for (let c = 0; c < curseur[r].length; c++) {
-          const px = mx + c;
-          if (px >= 0 && px < this.cols && curseur[r][c] === 1) {
-            this.vram[py][px] = 0b1011; // Blanc Surligné Curseur
-          }
-        }
-      }
-    }
+  public cacherCurseur(): void {
+    this.curseurVisible = false;
   }
 
   /**
-   * Envoie le signal vidéo VRAM binaire au moniteur
+   * Envoie le signal vidéo VRAM binaire au moniteur avec le curseur matériel superposé
    */
   public rafraichirSignal(): void {
     if (this.moniteur && this.estConnecte) {
-      this.moniteur.recevoirSignal(this.vram);
+      const curseurCoords =
+        this.curseurVisible && this.curseurX >= 0 && this.curseurY >= 0
+          ? { x: this.curseurX, y: this.curseurY }
+          : null;
+      this.moniteur.recevoirSignal(this.vram, curseurCoords);
       this.moniteur.render();
       this.frameCount++;
     }

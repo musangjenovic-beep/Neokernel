@@ -557,14 +557,284 @@ HALT`,
                   </button>
                 </div>
                 <pre className="text-[11px] font-mono text-stone-300 p-2 bg-stone-950 rounded border border-stone-800">
-{`CLEAR
-RECT 25, 20, 280, 115
-PRINT 45, 35, "FENETRE D'APPLICATION PERSONNALISEE"
-LINE 45, 48, 285, 48
-PRINT 45, 60, "Graphisme en VRAM 330x165 (5x7 Font)"
-PRINT 45, 75, "Palette binaire 16 teintes operationnelle"
+{`CLEAR 0
+RECT 25, 20, 280, 115, 3
+PRINT 45, 35, "FENETRE D'APPLICATION PERSONNALISEE", 15
+LINE 45, 48, 285, 48, 1
+PRINT 45, 60, "Graphisme en VRAM 330x165 (5x7 Font)", 14
+PRINT 45, 75, "Palette binaire 16 teintes RGB operationnelle", 6
 BEEP 440
 BEEP 880
+HALT`}
+                </pre>
+              </div>
+
+              {/* Fiche 1 : Exécuter un Code dès l'Allumage du PC (Auto-Boot) */}
+              <div className="p-3.5 bg-stone-900 border border-emerald-500/30 rounded-lg space-y-2">
+                <span className="text-xs font-mono text-emerald-400 font-bold uppercase flex items-center gap-1.5">
+                  <HardDrive className="w-4 h-4" />
+                  1. Comment Faire Exécuter un Code dès l'Allumage du PC
+                </span>
+                <p className="text-xs text-stone-300">
+                  Pour qu'un programme démarre automatiquement quand vous appuyez sur le bouton physique <strong>POWER ON</strong> :
+                </p>
+                <ol className="list-decimal list-inside text-xs font-mono space-y-1 text-stone-400 pl-1">
+                  <li>Ouvrez l'Éditeur d'OS (<kbd className="text-emerald-400 font-bold">[F3]</kbd> ou via le <strong>Menu Système</strong>).</li>
+                  <li>Sélectionnez <strong>Cible : Port USB 1</strong> et cliquez sur <strong>Flasher sur Clé USB</strong>.</li>
+                  <li>Le BIOS VirtuArch est configuré avec <strong>AUTO-BOOT ACTIF</strong> : dès l'allumage électrique, il charge le secteur initial en RAM à l'adresse <code className="text-emerald-300">0x0000</code> et lance immédiatement l'exécution.</li>
+                  <li>Au sommet de votre code source, la première instruction exécutée est la ligne 1 (point d'entrée <code className="text-emerald-300">START:</code>).</li>
+                </ol>
+              </div>
+
+              {/* Fiche 2 : Créer un Espace Cliquable (Boutons Souris) */}
+              <div className="p-3.5 bg-stone-900 border border-cyan-500/30 rounded-lg space-y-2">
+                <span className="text-xs font-mono text-cyan-400 font-bold uppercase flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4" />
+                  2. Créer un Espace Cliquable (Bouton Interactif)
+                </span>
+                <p className="text-xs text-stone-300">
+                  Un bouton est défini par un rectangle visuel et un test de collision souris :
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs font-mono">
+                  <div className="p-2.5 bg-stone-950 rounded border border-stone-800 space-y-1">
+                    <div className="text-cyan-300 font-bold">Méthode Rapide (Instruction IF_CLICK) :</div>
+                    <pre className="text-[11px] text-stone-300">
+{`// 1. Dessine le bouton (X=30, Y=40, W=80, H=20)
+FILLRECT 30, 40, 80, 20, 2
+RECT 30, 40, 80, 20, 15
+PRINT 35, 46, "DEMARRER", 0
+
+// 2. Test du clic dans la zone
+BOUCLE:
+  WAIT 30
+  IF_CLICK 30, 40, 80, 20, MON_ACTION
+  GOTO BOUCLE`}
+                    </pre>
+                  </div>
+                  <div className="p-2.5 bg-stone-950 rounded border border-stone-800 space-y-1">
+                    <div className="text-amber-300 font-bold">Méthode Bas-Niveau (Registres) :</div>
+                    <pre className="text-[11px] text-stone-300">
+{`MOUSE_BTN R0
+IF_EQ R0, 0, PAS_DE_CLIC
+MOUSE_X R1
+MOUSE_Y R2
+// Test boîte englobante [30..110, 40..60]
+IF_LT R1, 30, PAS_DE_CLIC
+IF_GT R1, 110, PAS_DE_CLIC
+IF_LT R2, 40, PAS_DE_CLIC
+IF_GT R2, 60, PAS_DE_CLIC
+GOTO MON_ACTION`}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+
+              {/* Fiche 3 : Détecter une Touche Clavier pour Lancer une Commande */}
+              <div className="p-3.5 bg-stone-900 border border-purple-500/30 rounded-lg space-y-2">
+                <span className="text-xs font-mono text-purple-400 font-bold uppercase flex items-center gap-1.5">
+                  <Terminal className="w-4 h-4" />
+                  3. Détecter l'Appui d'une Touche Clavier
+                </span>
+                <p className="text-xs text-stone-300">
+                  Associez n'importe quelle touche à une action ou commande système :
+                </p>
+                <pre className="text-[11px] font-mono text-stone-300 p-2.5 bg-stone-950 rounded border border-stone-800">
+{`// Avec l'instruction directe IF_KEY :
+IF_KEY "R", REDEMARRER_PC     // Touche 'R' -> Redémarrage
+IF_KEY "S", ETEINDRE_PC        // Touche 'S' -> Extinction
+IF_KEY 32, SAUTER_JEU          // Touche 32 (Espace)
+IF_KEY 13, VALIDER_MENU        // Touche 13 (Entrée)
+
+// Ou en lisant le registre via GETKEY :
+GETKEY R0
+IF_EQ R0, 82, REDEMARRER_PC`}
+                </pre>
+              </div>
+
+              {/* Fiche 4 : Groupes de Commandes en Assembleur (CALL/RET, Pile & MACROS) */}
+              <div className="p-3.5 bg-stone-900 border border-blue-500/30 rounded-lg space-y-2">
+                <span className="text-xs font-mono text-blue-400 font-bold uppercase flex items-center gap-1.5">
+                  <Layers className="w-4 h-4" />
+                  4. Groupes de Commandes en Assembleur (Sous-routines & Macros)
+                </span>
+                <p className="text-xs text-stone-300">
+                  En assembleur, un groupe de commandes se structure de deux manières :
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs font-mono">
+                  <div className="p-2.5 bg-stone-950 rounded border border-stone-800 space-y-1">
+                    <div className="text-emerald-400 font-bold">1. Sous-routines (CALL et RET) :</div>
+                    <p className="text-[11px] text-stone-400">
+                      Exécute un bloc et revient au point d'appel grâce à la pile matérielle :
+                    </p>
+                    <pre className="text-[11px] text-stone-300">
+{`CALL DESSINER_BOUTON
+// ... suite du code ...
+HALT
+
+DESSINER_BOUTON:
+  FILLRECT 20, 20, 60, 18, 8
+  PRINT 24, 24, "OK", 15
+  RET`}
+                    </pre>
+                  </div>
+                  <div className="p-2.5 bg-stone-950 rounded border border-stone-800 space-y-1">
+                    <div className="text-amber-400 font-bold">2. Macros (MACRO ... ENDMACRO) :</div>
+                    <p className="text-[11px] text-stone-400">
+                      Gabarit réutilisable avec paramètres remplacé lors de la compilation :
+                    </p>
+                    <pre className="text-[11px] text-stone-300">
+{`MACRO BOUTON x, y, titre
+  FILLRECT x, y, 70, 18, 2
+  RECT x, y, 70, 18, 15
+  PRINT x + 4, y + 4, titre, 0
+ENDMACRO
+
+// Utilisation :
+BOUTON 30, 40, "VALIDER"
+BOUTON 110, 40, "ANNULER"`}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+
+              {/* Fiche 5 : Créer des Animations Fluides */}
+              <div className="p-3.5 bg-stone-900 border border-yellow-500/30 rounded-lg space-y-2">
+                <span className="text-xs font-mono text-yellow-400 font-bold uppercase flex items-center gap-1.5">
+                  <Play className="w-4 h-4" />
+                  5. Créer des Animations Fluides (30 FPS)
+                </span>
+                <p className="text-xs text-stone-300">
+                  L'animation s'obtient avec une boucle <code className="text-yellow-400 font-bold">GOTO</code> cadencée par <code className="text-yellow-400 font-bold">WAIT 30</code> (30 images par seconde). À chaque trame, effacez la position précédente et dessinez la nouvelle !
+                </p>
+              </div>
+
+              {/* Tableau de Référence Complet des Instructions */}
+              <div className="p-3 bg-stone-900 border border-stone-800 rounded-lg space-y-3">
+                <span className="text-xs font-mono text-amber-400 font-bold uppercase">
+                  Tableau des Instructions Machine (VirtuScript & Assembleur)
+                </span>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs font-mono border-collapse">
+                    <thead>
+                      <tr className="border-b border-stone-800 text-stone-400">
+                        <th className="py-1 px-2">Instruction</th>
+                        <th className="py-1 px-2">Opcode</th>
+                        <th className="py-1 px-2">Rôle & Paramètres</th>
+                        <th className="py-1 px-2">Exemple</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-800/60 text-stone-300">
+                      <tr>
+                        <td className="py-1 px-2 text-emerald-400 font-bold">REBOOT</td>
+                        <td className="py-1 px-2 text-stone-500">0x08</td>
+                        <td className="py-1 px-2">Redémarre véritablement le PC virtuel</td>
+                        <td className="py-1 px-2 text-stone-400">REBOOT</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1 px-2 text-rose-400 font-bold">SHUTDOWN</td>
+                        <td className="py-1 px-2 text-stone-500">0x09</td>
+                        <td className="py-1 px-2">Éteint physiquement l'ordinateur et l'écran</td>
+                        <td className="py-1 px-2 text-stone-400">SHUTDOWN</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1 px-2 text-blue-400 font-bold">CALL label</td>
+                        <td className="py-1 px-2 text-stone-500">0x1F</td>
+                        <td className="py-1 px-2">Appelle une sous-routine (groupe de commandes)</td>
+                        <td className="py-1 px-2 text-stone-400">CALL MON_BOUTON</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1 px-2 text-blue-400 font-bold">RET</td>
+                        <td className="py-1 px-2 text-stone-500">0x20</td>
+                        <td className="py-1 px-2">Retour de la sous-routine appelée par CALL</td>
+                        <td className="py-1 px-2 text-stone-400">RET</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1 px-2 text-indigo-400 font-bold">PUSH / POP reg</td>
+                        <td className="py-1 px-2 text-stone-500">0x21 / 0x22</td>
+                        <td className="py-1 px-2">Sauvegarde ou restaure un registre sur la pile</td>
+                        <td className="py-1 px-2 text-stone-400">PUSH R0 / POP R0</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1 px-2 text-cyan-400 font-bold">IF_CLICK x, y, w, h, label</td>
+                        <td className="py-1 px-2 text-stone-500">0x23</td>
+                        <td className="py-1 px-2">Saute si la souris clique dans la zone définie</td>
+                        <td className="py-1 px-2 text-stone-400">IF_CLICK 30, 40, 80, 20, BTN</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1 px-2 text-purple-400 font-bold">IF_KEY key, label</td>
+                        <td className="py-1 px-2 text-stone-500">0x24</td>
+                        <td className="py-1 px-2">Saute si la touche clavier indiquée est pressée</td>
+                        <td className="py-1 px-2 text-stone-400">IF_KEY "R", REDEMARRER</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1 px-2 text-yellow-400 font-bold">WAIT ms</td>
+                        <td className="py-1 px-2 text-stone-500">0x07</td>
+                        <td className="py-1 px-2">Cadence les animations en millisecondes</td>
+                        <td className="py-1 px-2 text-stone-400">WAIT 30</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1 px-2 text-cyan-400 font-bold">FILLRECT x, y, w, h, col</td>
+                        <td className="py-1 px-2 text-stone-500">0x0B</td>
+                        <td className="py-1 px-2">Dessine un rectangle plein coloré RGB</td>
+                        <td className="py-1 px-2 text-stone-400">FILLRECT 20, 20, 100, 40, 8</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1 px-2 text-cyan-400 font-bold">FILLCIRCLE x, y, r, col</td>
+                        <td className="py-1 px-2 text-stone-500">0x0D</td>
+                        <td className="py-1 px-2">Dessine un disque plein (balle animée)</td>
+                        <td className="py-1 px-2 text-stone-400">FILLCIRCLE 165, 82, 10, 14</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1 px-2 text-yellow-400 font-bold">SOUND id</td>
+                        <td className="py-1 px-2 text-stone-500">0x0E</td>
+                        <td className="py-1 px-2">Bruitages arcade (1=Laser, 2=Saut, 3=Pièce, 4=Explo, 5=Powerup, 6=Rebond)</td>
+                        <td className="py-1 px-2 text-stone-400">SOUND 6</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Exemple de Mini Jeu Arcade */}
+              <div className="p-3 bg-stone-900 border border-stone-800 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-mono text-cyan-400 font-bold">
+                    Exemple Jeu d'Arcade Balle et Palette
+                  </span>
+                  <button
+                    onClick={() => {
+                      const port = ordinateur.hubUsb.cleUsb.port || 3;
+                      ordinateur.flasherEtBrancherCleUsb(
+                        'Jeu Pong RGB',
+                        `CLEAR 0
+PRINT 90, 8, "MINI ARCADE PONG (RGB)", 14
+RECT 10, 22, 310, 120, 3
+FILLRECT 135, 134, 60, 6, 6
+FILLCIRCLE 165, 70, 8, 14
+PRINT 20, 148, "SCORE : 250   VIES : 3", 15
+SOUND 1
+HALT`,
+                        port
+                      );
+                      ordinateur.booterDepuisCle();
+                      setInjectionSuccess(`Jeu Arcade flashé sur Clé USB (Port ${port}) et lancé !`);
+                      onRefresh();
+                      setTimeout(() => setInjectionSuccess(null), 3000);
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1 bg-cyan-500 hover:bg-cyan-400 text-stone-950 font-bold rounded text-[11px] font-mono shadow"
+                  >
+                    <Play className="w-3 h-3" />
+                    <span>Flasher & Jouer</span>
+                  </button>
+                </div>
+                <pre className="text-[11px] font-mono text-stone-300 p-2 bg-stone-950 rounded border border-stone-800">
+{`CLEAR 0
+PRINT 90, 8, "MINI ARCADE PONG (RGB)", 14
+RECT 10, 22, 310, 120, 3
+FILLRECT 135, 134, 60, 6, 6
+FILLCIRCLE 165, 70, 8, 14
+PRINT 20, 148, "SCORE : 250   VIES : 3", 15
+SOUND 1
 HALT`}
                 </pre>
               </div>
@@ -856,6 +1126,19 @@ HALT`}
                 <li>Le BIOS détecte immédiatement le média et vous invite à presser <code className="text-emerald-300 font-mono">[ENTRÉE]</code>.</li>
                 <li>Le moteur pas-à-pas émet son bruit de lecture (<code className="text-amber-300 font-mono">chhk-chhk-krrr</code>), les octets sont chargés à <code className="text-emerald-300 font-mono">0x0000</code> et votre système s'exécute !</li>
               </ol>
+            </div>
+
+            {/* Carte 4: Périphériques, Animations & Clavier F1..F12 */}
+            <div className="p-4 bg-stone-900 border border-stone-800 rounded-xl space-y-3 text-xs">
+              <h4 className="font-bold text-emerald-300 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-emerald-400" />
+                <span>Périphériques Réalistes & Animations Hardware :</span>
+              </h4>
+              <ul className="list-disc list-inside space-y-1.5 text-stone-300">
+                <li><strong>Curseur Souris Matériel (Overlay DAC) :</strong> Le curseur est superposé en direct sur le signal vidéo au niveau du moniteur sans altérer la mémoire VRAM, éliminant tout artefact ou résidu de traînée lors des déplacements.</li>
+                <li><strong>Animations & Graphismes pilotés par Registres :</strong> Les commandes <code className="text-cyan-300 font-mono">FILLCIRCLE R0, R1, 6, 11</code>, <code className="text-cyan-300 font-mono">RECT</code>, <code className="text-cyan-300 font-mono">ADD R0, R2</code> évaluent les registres en temps réel pour une fluidité à 30 images/seconde avec rebonds physiques.</li>
+                <li><strong>Rangée de Touches de Fonction [F1] à [F12] :</strong> Accès direct au BIOS Setup (<code className="text-emerald-300 font-mono">[F2]</code>), à l'Éditeur d'OS (<code className="text-emerald-300 font-mono">[F3]</code>), et à toutes les touches programmables dans vos applications avec <code className="text-emerald-300 font-mono">IF_KEY "F1", LABEL</code>.</li>
+              </ul>
             </div>
           </div>
         )}

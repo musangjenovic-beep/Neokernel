@@ -3,7 +3,7 @@ import { ClavierUSB } from '../hardware/keyboard';
 import { SourisUSB } from '../hardware/mouse';
 import { HubUSB } from '../hardware/usbHub';
 import { SortieAudio } from '../hardware/audio';
-import { LanguageStudio, ProgrammeCompileBinaire } from './languageStudio';
+import { LanguageStudio, ProgrammeCompileBinaire, OPCODES } from './languageStudio';
 
 export type ModeDemarrage = 'bios_rom' | 'bios_setup' | 'os_personnalise';
 
@@ -61,6 +61,21 @@ export class BinaryOS {
 
   // Animation de clignotement curseur BIOS
   public curseurClignotant: boolean = true;
+
+  // État de la machine virtuelle pour animations temps réel et interactions
+  public vmRegisters: number[] = [0, 0, 0, 0, 0, 0, 0, 0];
+  public vmStack: number[] = [];
+  public vmPc: number = 0;
+  public vmRam: Uint8Array = new Uint8Array(65536);
+  public vmEnExecution: boolean = false;
+  public vmPauseJusquA: number = 0;
+  public vmActiveColor: number = 0b0001;
+  public vmClicDetecte: boolean = false;
+  public autoBootCleUsb: boolean = true; // Démarre automatiquement sur USB Port 1 à l'allumage
+
+  // Callbacks de contrôle d'alimentation depuis le bytecode de l'OS
+  public onReboot?: () => void;
+  public onShutdown?: () => void;
 
   constructor(
     vga: ControleurVGA,
@@ -188,112 +203,417 @@ export class BinaryOS {
 
     this.terminalLogs.push(`[BIOS] Bootloader : Chargement de "${nomSysteme}" depuis USB Port ${portUsb}...`);
     this.terminalLogs.push(`[BIOS] ${bytecode.length} octets binaires copiés en RAM à l'adresse 0x0000.`);
-    this.terminalLogs.push(`[BIOS] Saut d'exécution vers PC=0x0000.`);
+    this.terminalLogs.push(`[BIOS] Démarrage du processeur virtuel à l'adresse PC=0x0000.`);
 
-    // Efface la VRAM et réinitialise le canvas utilisateur
+    // Efface la VRAM et réinitialise l'état de la machine virtuelle
     this.vga.clear(0b0000);
     for (let y = 0; y < 165; y++) {
       this.customVram[y].fill(0);
     }
 
+    this.vmRegisters = [0, 0, 0, 0, 0, 0, 0, 0];
+    this.vmStack = [];
+    this.vmPc = 0;
+    this.vmRam.fill(0);
+    this.vmActiveColor = 0b0001;
+    this.vmEnExecution = true;
+    this.vmPauseJusquA = 0;
+    this.vmClicDetecte = false;
+
     this.audio.jouerChimeDemarrage();
-    this.executerBytecodeOsPersonnalise();
+    this.executerTrancheBytecode(4000);
     this.rafraichirBureau();
   }
 
   /**
-   * Exécute le bytecode du système personnalisé sur la VRAM 330x165
+   * Horloge d'animation et de rafraîchissement temps réel de l'OS personnalisé
    */
-  public executerBytecodeOsPersonnalise(): void {
+  public tickOs(): void {
+    if (this.modeDemarrage === 'os_personnalise' && this.vmEnExecution) {
+      this.executerTrancheBytecode(2500);
+      this.rafraichirBureau();
+    }
+  }
+
+  /**
+   * Lit un opérande binaire (soit la valeur dynamique d'un registre R0..R7, soit un entier immédiat signé 16-bit)
+   */
+  public lireOperande(octets: number[]): number {
+    const tag = octets[this.vmPc++] ?? 0;
+    if (tag === 0x01) {
+      // Registre R0..R7
+      const reg = (octets[this.vmPc++] ?? 0) & 0x07;
+      return this.vmRegisters[reg] ?? 0;
+    } else {
+      // Immédiat signé 16-bit (msb, lsb)
+      const msb = octets[this.vmPc++] ?? 0;
+      const lsb = octets[this.vmPc++] ?? 0;
+      let val = (msb << 8) | lsb;
+      if (val >= 0x8000) {
+        val -= 0x10000;
+      }
+      return val;
+    }
+  }
+
+  /**
+   * Exécute une tranche d'instructions bytecode pour la frame en cours (Animation & Events)
+   */
+  public executerTrancheBytecode(maxInstructions: number = 3000): void {
     const octets = this.octetsOsActif;
-    if (!octets || octets.length === 0) return;
+    if (!octets || octets.length === 0 || !this.vmEnExecution) return;
 
-    this.vga.clear(0b0000);
+    const now = Date.now();
+    if (now < this.vmPauseJusquA) {
+      return;
+    }
 
-    let pc = 0;
-    let securite = 0;
+    let cycles = 0;
 
-    while (pc < octets.length && securite < 3000) {
-      securite++;
-      const op = octets[pc++];
+    while (this.vmPc < octets.length && cycles < maxInstructions) {
+      cycles++;
+      const op = octets[this.vmPc++];
 
       switch (op) {
-        case 1: {
-          // PRINT x, y, len, string...
-          const x = octets[pc++] || 0;
-          const y = octets[pc++] || 0;
-          const len = octets[pc++] || 0;
+        case OPCODES.PRINT: {
+          const x = this.lireOperande(octets);
+          const y = this.lireOperande(octets);
+          const colByte = octets[this.vmPc++] ?? 0xff;
+          const len = octets[this.vmPc++] ?? 0;
           let str = '';
           for (let c = 0; c < len; c++) {
-            str += String.fromCharCode(octets[pc++] || 32);
+            str += String.fromCharCode(octets[this.vmPc++] || 32);
           }
-          this.vga.dessinerTexte(str, x, y, 0b0001); // Vert phosphore
+          const col = colByte === 0xff ? this.vmActiveColor : (colByte & 0x0f);
+          this.vga.dessinerTexte(str, x, y, col);
           break;
         }
 
-        case 2: {
-          // PIXEL x, y
-          const x = octets[pc++] || 0;
-          const y = octets[pc++] || 0;
-          this.vga.setPixel(x, y, 0b0011); // Cyan
+        case OPCODES.PIXEL: {
+          const x = this.lireOperande(octets);
+          const y = this.lireOperande(octets);
+          const colByte = octets[this.vmPc++] ?? 0xff;
+          const col = colByte === 0xff ? this.vmActiveColor : (colByte & 0x0f);
+          this.vga.setPixel(x, y, col);
           break;
         }
 
-        case 3: {
-          // RECT x, y, w, h
-          const x = octets[pc++] || 0;
-          const y = octets[pc++] || 0;
-          const w = octets[pc++] || 10;
-          const h = octets[pc++] || 10;
-          this.vga.dessinerRect(x, y, w, h, 0b0010, false); // Ambre
+        case OPCODES.RECT: {
+          const x = this.lireOperande(octets);
+          const y = this.lireOperande(octets);
+          const w = this.lireOperande(octets);
+          const h = this.lireOperande(octets);
+          const colByte = octets[this.vmPc++] ?? 0xff;
+          const col = colByte === 0xff ? this.vmActiveColor : (colByte & 0x0f);
+          this.vga.dessinerRect(x, y, w, h, col, false);
           break;
         }
 
-        case 4: {
-          // LINE x0, y0, x1, y1
-          const x0 = octets[pc++] || 0;
-          const y0 = octets[pc++] || 0;
-          const x1 = octets[pc++] || 10;
-          const y1 = octets[pc++] || 10;
-          this.vga.dessinerLigne(x0, y0, x1, y1, 0b0100); // Blanc papier
+        case OPCODES.FILLRECT: {
+          const x = this.lireOperande(octets);
+          const y = this.lireOperande(octets);
+          const w = this.lireOperande(octets);
+          const h = this.lireOperande(octets);
+          const colByte = octets[this.vmPc++] ?? 0xff;
+          const col = colByte === 0xff ? this.vmActiveColor : (colByte & 0x0f);
+          this.vga.dessinerRectanglePlein(x, y, w, h, col);
           break;
         }
 
-        case 5: {
-          // CLEAR
-          this.vga.clear(0b0000);
+        case OPCODES.CIRCLE: {
+          const xc = this.lireOperande(octets);
+          const yc = this.lireOperande(octets);
+          const r = this.lireOperande(octets);
+          const colByte = octets[this.vmPc++] ?? 0xff;
+          const col = colByte === 0xff ? this.vmActiveColor : (colByte & 0x0f);
+          this.vga.dessinerCercle(xc, yc, r, col, false);
           break;
         }
 
-        case 6: {
-          // BEEP freqMsb, freqLsb
-          const msb = octets[pc++] || 0;
-          const lsb = octets[pc++] || 0;
+        case OPCODES.FILLCIRCLE: {
+          const xc = this.lireOperande(octets);
+          const yc = this.lireOperande(octets);
+          const r = this.lireOperande(octets);
+          const colByte = octets[this.vmPc++] ?? 0xff;
+          const col = colByte === 0xff ? this.vmActiveColor : (colByte & 0x0f);
+          this.vga.dessinerCercle(xc, yc, r, col, true);
+          break;
+        }
+
+        case OPCODES.LINE: {
+          const x0 = this.lireOperande(octets);
+          const y0 = this.lireOperande(octets);
+          const x1 = this.lireOperande(octets);
+          const y1 = this.lireOperande(octets);
+          const colByte = octets[this.vmPc++] ?? 0xff;
+          const col = colByte === 0xff ? this.vmActiveColor : (colByte & 0x0f);
+          this.vga.dessinerLigne(x0, y0, x1, y1, col);
+          break;
+        }
+
+        case OPCODES.CLEAR: {
+          const col = (octets[this.vmPc++] ?? 0) & 0x0f;
+          this.vga.clear(col);
+          break;
+        }
+
+        case OPCODES.COLOR: {
+          this.vmActiveColor = (octets[this.vmPc++] ?? 1) & 0x0f;
+          break;
+        }
+
+        case OPCODES.BEEP: {
+          const msb = octets[this.vmPc++] ?? 0;
+          const lsb = octets[this.vmPc++] ?? 0;
+          const durMs = octets[this.vmPc++] ?? 80;
           const freq = (msb << 8) | lsb;
-          this.audio.jouerBip(freq > 0 ? freq : 440, 0.15, 'square');
+          this.audio.jouerBip(freq > 0 ? freq : 440, durMs / 1000, 'square');
           break;
         }
 
-        case 15: {
-          // HALT
-          pc = octets.length;
+        case OPCODES.SOUND: {
+          const fxId = octets[this.vmPc++] ?? 1;
+          this.audio.jouerEffetJeu(fxId);
           break;
+        }
+
+        case OPCODES.WAIT: {
+          const ms = this.lireOperande(octets);
+          this.vmPauseJusquA = Date.now() + Math.max(0, ms);
+          return; // Met en pause pour la durée requise et rend la main
+        }
+
+        case OPCODES.REBOOT: {
+          this.vmEnExecution = false;
+          if (this.onReboot) this.onReboot();
+          this.vmPc = octets.length;
+          return;
+        }
+
+        case OPCODES.SHUTDOWN: {
+          this.vmEnExecution = false;
+          if (this.onShutdown) this.onShutdown();
+          this.vmPc = octets.length;
+          return;
+        }
+
+        case OPCODES.SET: {
+          const reg = (octets[this.vmPc++] ?? 0) & 0x07;
+          const val = this.lireOperande(octets);
+          this.vmRegisters[reg] = val;
+          break;
+        }
+
+        case OPCODES.ADD: {
+          const reg = (octets[this.vmPc++] ?? 0) & 0x07;
+          const val = this.lireOperande(octets);
+          this.vmRegisters[reg] += val;
+          break;
+        }
+
+        case OPCODES.SUB: {
+          const reg = (octets[this.vmPc++] ?? 0) & 0x07;
+          const val = this.lireOperande(octets);
+          this.vmRegisters[reg] -= val;
+          break;
+        }
+
+        case OPCODES.RANDOM: {
+          const reg = (octets[this.vmPc++] ?? 0) & 0x07;
+          const min = octets[this.vmPc++] ?? 0;
+          const max = octets[this.vmPc++] ?? 255;
+          this.vmRegisters[reg] = Math.floor(Math.random() * (max - min + 1)) + min;
+          break;
+        }
+
+        case OPCODES.GOTO: {
+          const msb = octets[this.vmPc++] ?? 0;
+          const lsb = octets[this.vmPc++] ?? 0;
+          const addr = (msb << 8) | lsb;
+          if (addr < octets.length) {
+            this.vmPc = addr;
+          }
+          break;
+        }
+
+        case OPCODES.IF_EQ: {
+          const reg = (octets[this.vmPc++] ?? 0) & 0x07;
+          const cmp = this.lireOperande(octets);
+          const msb = octets[this.vmPc++] ?? 0;
+          const lsb = octets[this.vmPc++] ?? 0;
+          const addr = (msb << 8) | lsb;
+          if (this.vmRegisters[reg] === cmp && addr < octets.length) {
+            this.vmPc = addr;
+          }
+          break;
+        }
+
+        case OPCODES.IF_NE: {
+          const reg = (octets[this.vmPc++] ?? 0) & 0x07;
+          const cmp = this.lireOperande(octets);
+          const msb = octets[this.vmPc++] ?? 0;
+          const lsb = octets[this.vmPc++] ?? 0;
+          const addr = (msb << 8) | lsb;
+          if (this.vmRegisters[reg] !== cmp && addr < octets.length) {
+            this.vmPc = addr;
+          }
+          break;
+        }
+
+        case OPCODES.IF_LT: {
+          const reg = (octets[this.vmPc++] ?? 0) & 0x07;
+          const cmp = this.lireOperande(octets);
+          const msb = octets[this.vmPc++] ?? 0;
+          const lsb = octets[this.vmPc++] ?? 0;
+          const addr = (msb << 8) | lsb;
+          if (this.vmRegisters[reg] < cmp && addr < octets.length) {
+            this.vmPc = addr;
+          }
+          break;
+        }
+
+        case OPCODES.IF_GT: {
+          const reg = (octets[this.vmPc++] ?? 0) & 0x07;
+          const cmp = this.lireOperande(octets);
+          const msb = octets[this.vmPc++] ?? 0;
+          const lsb = octets[this.vmPc++] ?? 0;
+          const addr = (msb << 8) | lsb;
+          if (this.vmRegisters[reg] > cmp && addr < octets.length) {
+            this.vmPc = addr;
+          }
+          break;
+        }
+
+        case OPCODES.CALL: {
+          const msb = octets[this.vmPc++] ?? 0;
+          const lsb = octets[this.vmPc++] ?? 0;
+          const addr = (msb << 8) | lsb;
+          if (this.vmStack.length < 128) {
+            this.vmStack.push(this.vmPc);
+          }
+          if (addr < octets.length) {
+            this.vmPc = addr;
+          }
+          break;
+        }
+
+        case OPCODES.RET: {
+          if (this.vmStack.length > 0) {
+            this.vmPc = this.vmStack.pop()!;
+          } else {
+            this.vmPc = octets.length;
+          }
+          break;
+        }
+
+        case OPCODES.PUSH: {
+          const reg = (octets[this.vmPc++] ?? 0) & 0x07;
+          if (this.vmStack.length < 128) {
+            this.vmStack.push(this.vmRegisters[reg]);
+          }
+          break;
+        }
+
+        case OPCODES.POP: {
+          const reg = (octets[this.vmPc++] ?? 0) & 0x07;
+          if (this.vmStack.length > 0) {
+            this.vmRegisters[reg] = this.vmStack.pop()!;
+          }
+          break;
+        }
+
+        case OPCODES.IF_CLICK: {
+          const x = this.lireOperande(octets);
+          const y = this.lireOperande(octets);
+          const w = this.lireOperande(octets);
+          const h = this.lireOperande(octets);
+          const msb = octets[this.vmPc++] ?? 0;
+          const lsb = octets[this.vmPc++] ?? 0;
+          const addr = (msb << 8) | lsb;
+          const inside = this.sourisX >= x && this.sourisX <= (x + w) && this.sourisY >= y && this.sourisY <= (y + h);
+          const clicked = this.souris.clicGauche || this.vmClicDetecte;
+          if (inside && clicked && addr < octets.length) {
+            this.vmPc = addr;
+            this.vmClicDetecte = false;
+          }
+          break;
+        }
+
+        case OPCODES.IF_KEY: {
+          const codeTouche = octets[this.vmPc++] ?? 0;
+          const msb = octets[this.vmPc++] ?? 0;
+          const lsb = octets[this.vmPc++] ?? 0;
+          const addr = (msb << 8) | lsb;
+          const currentKey = this.clavier.dernierPaquet?.codeAscii ?? 0;
+          const currentName = (this.clavier.dernierPaquet?.nomTouche || '').toUpperCase();
+          const matches = currentKey === codeTouche ||
+            (codeTouche >= 65 && codeTouche <= 90 && currentName === String.fromCharCode(codeTouche)) ||
+            (codeTouche >= 48 && codeTouche <= 57 && currentName === String.fromCharCode(codeTouche));
+          if (matches && addr < octets.length) {
+            this.vmPc = addr;
+          }
+          break;
+        }
+
+        case OPCODES.GETKEY: {
+          const reg = (octets[this.vmPc++] ?? 0) & 0x07;
+          this.vmRegisters[reg] = this.clavier.dernierPaquet?.codeAscii ?? 0;
+          break;
+        }
+
+        case OPCODES.MOUSE_X: {
+          const reg = (octets[this.vmPc++] ?? 0) & 0x07;
+          this.vmRegisters[reg] = Math.min(255, this.sourisX);
+          break;
+        }
+
+        case OPCODES.MOUSE_Y: {
+          const reg = (octets[this.vmPc++] ?? 0) & 0x07;
+          this.vmRegisters[reg] = Math.min(255, this.sourisY);
+          break;
+        }
+
+        case OPCODES.MOUSE_BTN: {
+          const reg = (octets[this.vmPc++] ?? 0) & 0x07;
+          this.vmRegisters[reg] = (this.souris.clicGauche || this.vmClicDetecte ? 1 : 0) | (this.souris.clicDroit ? 2 : 0);
+          break;
+        }
+
+        case OPCODES.POKE: {
+          const msb = octets[this.vmPc++] ?? 0;
+          const lsb = octets[this.vmPc++] ?? 0;
+          const val = octets[this.vmPc++] ?? 0;
+          const addr = (msb << 8) | lsb;
+          this.vmRam[addr] = val & 0xff;
+          break;
+        }
+
+        case OPCODES.PEEK: {
+          const msb = octets[this.vmPc++] ?? 0;
+          const lsb = octets[this.vmPc++] ?? 0;
+          const reg = (octets[this.vmPc++] ?? 0) & 0x07;
+          const addr = (msb << 8) | lsb;
+          this.vmRegisters[reg] = this.vmRam[addr] ?? 0;
+          break;
+        }
+
+        case OPCODES.HALT: {
+          this.vmEnExecution = false;
+          this.vmPc = octets.length;
+          return;
         }
 
         default:
           break;
       }
     }
+  }
 
-    // Bandeau d'information discret en haut
-    this.vga.dessinerRect(0, 0, 330, 11, 0b0011, false);
-    this.vga.dessinerTexte(`SYSTEME: ${this.nomOsActif.toUpperCase()} (EXECUTION EN RAM)`, 4, 2, 0b0011);
-    this.vga.dessinerTexte('[ESC: RETOUR BIOS]', 220, 2, 0b0101);
-
-    // Barre d'état en bas
-    this.vga.dessinerRect(0, 154, 330, 11, 0b1010, false);
-    this.vga.dessinerTexte(`RAM: ${octets.length} octets charges a 0x0000`, 4, 156, 0b0110);
-    this.vga.dessinerTexte(`SOURIS X:${this.sourisX} Y:${this.sourisY}`, 235, 156, 0b0010);
+  /**
+   * Alias de compatibilité
+   */
+  public executerBytecodeOsPersonnalise(): void {
+    this.executerTrancheBytecode(4000);
   }
 
   /**
@@ -487,14 +807,13 @@ export class BinaryOS {
       }
     }
 
-    // En mode OS Personnalisé : clic sur [ESC: RETOUR BIOS]
+    // En mode OS Personnalisé : le clic est transmis directement au processeur virtuel (IF_CLICK)
     if (this.modeDemarrage === 'os_personnalise') {
-      if (y <= 12 && x >= 210) {
-        this.verifierOuDeclencherAlerteSecurite('RESET_BIOS', 'ESC', 'Retour au BIOS', () => {
-          this.passerEnModeBiosVierge();
-        });
-        return;
-      }
+      this.vmClicDetecte = true;
+      this.executerTrancheBytecode(2500);
+      this.rafraichirBureau();
+      this.vmClicDetecte = false;
+      return;
     }
   }
 

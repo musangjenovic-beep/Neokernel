@@ -15,6 +15,10 @@ import {
   BookOpen,
   Play,
   Usb,
+  Menu,
+  ChevronDown,
+  X,
+  Power,
   HardDrive,
 } from 'lucide-react';
 
@@ -25,6 +29,8 @@ export default function App() {
   const [tick, setTick] = useState<number>(0);
   const [isStudioOpen, setIsStudioOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const [settingsInitialTab, setSettingsInitialTab] = useState<'ports' | 'os_code' | 'json_cpu' | 'cpu' | 'dbd' | 'memory' | 'disk' | 'guide'>('guide');
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [currentPreset, setCurrentPreset] = useState<OsPreset>(OS_PRESETS[0]);
@@ -32,6 +38,21 @@ export default function App() {
   const forceUpdate = useCallback(() => {
     setTick((t) => (t + 1) % 1000000);
   }, []);
+
+  // Fermeture du menu déroulant lors d'un clic extérieur
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+    if (isMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isMenuOpen]);
 
   // Initialisation et démarrage matériel de l'ordinateur virtuel
   useEffect(() => {
@@ -165,125 +186,171 @@ export default function App() {
           <span>VRAM : <strong className="text-emerald-400">330×165 Binaire</strong></span>
         </div>
 
-        {/* Zone 3: Actions principales */}
-        <div className="flex items-center gap-2.5 shrink-0">
-          {computer.os.modeDemarrage === 'bios_rom' && (
-            <div className="flex items-center gap-2">
-              {bootableUsb ? (
+        {/* Zone 3: Menu Principal Unique (Regroupe toutes les commandes et outils) */}
+        <div className="relative shrink-0" ref={menuRef}>
+          <button
+            onClick={() => setIsMenuOpen((prev) => !prev)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-bold text-xs rounded-lg shadow-md transition-all active:scale-95"
+            title="Ouvrir le menu principal du système VirtuArch"
+          >
+            <Menu className="w-4 h-4" />
+            <span>Menu Système</span>
+            <ChevronDown
+              className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                isMenuOpen ? 'rotate-180' : ''
+              }`}
+            />
+          </button>
+
+          {/* Menu Déroulant Élégant */}
+          {isMenuOpen && (
+            <div className="absolute right-0 mt-2 w-72 rounded-xl bg-stone-900 border border-stone-800 shadow-2xl z-50 overflow-hidden font-sans py-1 divide-y divide-stone-800/80 animate-in fade-in slide-in-from-top-2 duration-150">
+              {/* Section 1: Développement OS & Manuel */}
+              <div className="p-1">
                 <button
                   onClick={() => {
-                    computer.booterDepuisCle();
-                    forceUpdate();
+                    setIsStudioOpen(true);
+                    setIsMenuOpen(false);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-stone-950 transition-all shadow-md animate-pulse whitespace-nowrap"
-                  title={`Démarrer le système "${bootableUsb.cle.nomSysteme}" depuis le Port USB ${bootableUsb.port}`}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/10 rounded-lg transition-colors text-left"
                 >
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>Booter Clé USB (Port {bootableUsb.port})</span>
+                  <Code className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <div>
+                    <div className="font-bold">Éditeur d'OS & Flasheur USB</div>
+                    <div className="text-[10px] text-stone-400 font-normal">
+                      Coder en BitScript & flasher sur clé USB
+                    </div>
+                  </div>
                 </button>
-              ) : (
+
+                <button
+                  onClick={() => {
+                    setSettingsInitialTab('guide');
+                    setIsSettingsOpen(true);
+                    setIsMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-cyan-300 hover:bg-cyan-500/10 rounded-lg transition-colors text-left"
+                >
+                  <BookOpen className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <div>
+                    <div className="font-bold">Manuel & Guide OS</div>
+                    <div className="text-[10px] text-stone-400 font-normal">
+                      Assembleur, commandes RGB, jeux & OS
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              {/* Section 2: Boot & BIOS */}
+              <div className="p-1">
+                {bootableUsb && (
+                  <button
+                    onClick={() => {
+                      computer.booterDepuisCle();
+                      forceUpdate();
+                      setIsMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors text-left"
+                  >
+                    <Play className="w-4 h-4 fill-current shrink-0" />
+                    <div>
+                      <div>Booter Clé USB (Port {bootableUsb.port})</div>
+                      <div className="text-[10px] text-stone-400 font-normal">
+                        Lancer "{bootableUsb.cle.nomSysteme}"
+                      </div>
+                    </div>
+                  </button>
+                )}
+
                 <button
                   onClick={() => {
                     computer.activerAccesDisque(300, 3);
                     computer.os.tenterBootDepuisUsb();
                     forceUpdate();
+                    setIsMenuOpen(false);
                   }}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-stone-800 hover:bg-stone-700 text-stone-300 border border-stone-700 transition-colors whitespace-nowrap"
-                  title="Rescanner les ports USB 1, 2 et 3 à la recherche d'un disque bootable"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-stone-300 hover:bg-stone-800 rounded-lg transition-colors text-left"
                 >
-                  <Usb className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Rescanner Ports USB</span>
+                  <Usb className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Rescanner Ports USB 1, 2, 3</span>
                 </button>
-              )}
 
-              <button
-                onClick={() => {
-                  computer.os.ouvrirBiosSetup();
-                  forceUpdate();
-                }}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 transition-colors whitespace-nowrap"
-                title="Accéder à la configuration CMOS BIOS"
-              >
-                <span>[F2] Setup</span>
-              </button>
+                <button
+                  onClick={() => {
+                    computer.os.ouvrirBiosSetup();
+                    forceUpdate();
+                    setIsMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-stone-300 hover:bg-stone-800 rounded-lg transition-colors text-left"
+                >
+                  <HardDrive className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <span>BIOS CMOS Setup Utility [F2]</span>
+                </button>
+
+                {computer.os.modeDemarrage === 'os_personnalise' && (
+                  <button
+                    onClick={() => {
+                      computer.os.passerEnModeBiosVierge();
+                      forceUpdate();
+                      setIsMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-amber-300 hover:bg-amber-500/10 rounded-lg transition-colors text-left"
+                  >
+                    <RotateCcw className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>Quitter OS (Retour BIOS)</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Section 3: Configuration & Matériel */}
+              <div className="p-1">
+                <button
+                  onClick={() => {
+                    setSettingsInitialTab('ports');
+                    setIsSettingsOpen(true);
+                    setIsMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-stone-300 hover:bg-stone-800 rounded-lg transition-colors text-left"
+                >
+                  <Sliders className="w-4 h-4 text-stone-400 shrink-0" />
+                  <span>Ports E/S & Réglages Matériels</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    handleReset();
+                    setIsMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors text-left"
+                >
+                  <RotateCcw className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>Redémarrer la Machine (Reset)</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (computer.estAllume) {
+                      computer.eteindre();
+                    } else {
+                      computer.demarrer();
+                    }
+                    forceUpdate();
+                    setIsMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold rounded-lg transition-colors text-left ${
+                    computer.estAllume
+                      ? 'text-rose-400 hover:bg-rose-500/10'
+                      : 'text-emerald-400 hover:bg-emerald-500/10'
+                  }`}
+                >
+                  <Power className="w-4 h-4 shrink-0" />
+                  <span>
+                    {computer.estAllume ? "Éteindre l'ordinateur" : "Allumer l'ordinateur"}
+                  </span>
+                </button>
+              </div>
             </div>
           )}
-
-          {computer.os.modeDemarrage === 'bios_setup' && (
-            <button
-              onClick={() => {
-                computer.os.passerEnModeBiosVierge();
-                forceUpdate();
-              }}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 transition-colors whitespace-nowrap"
-            >
-              <span>[ESC] Quitter Setup</span>
-            </button>
-          )}
-
-          {computer.os.modeDemarrage === 'os_personnalise' && (
-            <button
-              onClick={() => {
-                computer.os.verifierOuDeclencherAlerteSecurite('RESET_BIOS', 'ESC', 'Retour au BIOS', () => {
-                  computer.activerAccesDisque(250, 2);
-                  computer.os.passerEnModeBiosVierge();
-                });
-                forceUpdate();
-              }}
-              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all whitespace-nowrap ${
-                computer.os.alerteSecurite?.action === 'RESET_BIOS'
-                  ? 'bg-rose-500 text-white border-rose-400 font-bold animate-pulse'
-                  : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/30'
-              }`}
-              title="Appuyez 2 fois sur [ESC] pour réinitialiser la machine et retourner au BIOS"
-            >
-              <span>{computer.os.alerteSecurite?.action === 'RESET_BIOS' ? 'Confirmer [ESC] ?' : '[ESC] Quitter OS'}</span>
-            </button>
-          )}
-
-          {/* Bouton Éditeur & Flasheur Clé USB */}
-          <button
-            onClick={() => setIsStudioOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-stone-950 rounded-lg text-xs font-bold transition-colors shadow-sm whitespace-nowrap"
-            title="Écrire votre système et flasher sur la clé USB (Port 1, 2 ou 3)"
-          >
-            <Code className="w-3.5 h-3.5" />
-            <span>Éditeur & Flasher Clé USB</span>
-          </button>
-
-          {/* Guide et manuel */}
-          <button
-            onClick={() => {
-              setSettingsInitialTab('guide');
-              setIsSettingsOpen(true);
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 rounded-lg text-xs font-semibold transition-colors shadow-sm whitespace-nowrap"
-            title="Ouvrir le guide complet de l'assembleur et du développement d'OS"
-          >
-            <BookOpen className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Manuel & Guide OS</span>
-          </button>
-
-          {/* Redémarrage matériel */}
-          <button
-            onClick={handleReset}
-            title="Redémarrer l'ordinateur virtuel"
-            className="p-1.5 text-xs text-stone-300 bg-stone-800 hover:bg-stone-700 rounded-lg border border-stone-700 transition-colors"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-          </button>
-
-          {/* Menu ports & réglages */}
-          <button
-            onClick={() => {
-              setSettingsInitialTab('ports');
-              setIsSettingsOpen(true);
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-stone-800 hover:bg-stone-700 text-stone-200 hover:text-white rounded-lg border border-stone-700 transition-colors whitespace-nowrap"
-          >
-            <Sliders className="w-3.5 h-3.5 text-stone-400" />
-            <span>Ports & Réglages</span>
-          </button>
         </div>
       </header>
 

@@ -34,6 +34,7 @@ export class OrdinateurVirtuel {
   private precedentClicGauche: boolean = false;
   private precedentClicDroit: boolean = false;
   private timerDisque: number | null = null;
+  private timerAnimation: number | null = null;
 
   // Callback pour ouvrir l'éditeur externe si demandé au clavier ([F3] ou [E])
   public onDemandeEditeur?: () => void;
@@ -55,6 +56,13 @@ export class OrdinateurVirtuel {
 
     // Initialise le système d'exploitation et BIOS ROM
     this.os = new BinaryOS(this.vga, this.clavier, this.souris, this.hubUsb, this.audio);
+
+    this.os.onReboot = () => {
+      this.redemarrer();
+    };
+    this.os.onShutdown = () => {
+      this.eteindre();
+    };
 
     // Liaisons d'interruption du clavier USB
     this.clavier.onInterruption = () => {
@@ -97,6 +105,9 @@ export class OrdinateurVirtuel {
             this.os.passerEnModeBiosVierge();
           });
           return;
+        } else {
+          // Exécute immédiatement la tranche pour réagir aux touches (IF_KEY)
+          this.os.executerTrancheBytecode(2500);
         }
       }
 
@@ -198,16 +209,44 @@ export class OrdinateurVirtuel {
   public demarrer(): void {
     this.estAllume = true;
     this.moniteur.isPowered = true;
+    this.audio.jouerSonRelaisPower(true);
     this.activerAccesDisque(600, 5);
+
+    // Démarrage de l'horloge d'animation temps réel (30 FPS)
+    if (this.timerAnimation) {
+      clearInterval(this.timerAnimation);
+    }
+    this.timerAnimation = window.setInterval(() => {
+      if (this.estAllume && this.moniteur.isPowered) {
+        this.os.tickOs();
+      }
+    }, 33);
+
     setTimeout(() => {
       this.audio.jouerPostBeep();
-    }, 200);
+
+      // Auto-Boot : Si une clé USB bootable est présente sur un port et l'option est active
+      if (this.os.autoBootCleUsb && this.os.modeDemarrage === 'bios_rom') {
+        const media = this.hubUsb.trouverCleBootable();
+        if (media && media.cle.bytecode.length > 0) {
+          this.booterDepuisCle();
+        }
+      }
+    }, 450);
+
     this.os.rafraichirBureau();
   }
 
   public eteindre(): void {
     this.estAllume = false;
     this.moniteur.isPowered = false;
+    this.audio.jouerSonRelaisPower(false);
+
+    if (this.timerAnimation) {
+      clearInterval(this.timerAnimation);
+      this.timerAnimation = null;
+    }
+
     this.moniteur.render();
   }
 
@@ -216,6 +255,6 @@ export class OrdinateurVirtuel {
     this.cpu.reset(false);
     setTimeout(() => {
       this.demarrer();
-    }, 280);
+    }, 350);
   }
 }

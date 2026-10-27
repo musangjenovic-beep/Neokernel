@@ -213,4 +213,107 @@ export class SortieAudio {
     setTimeout(() => this.jouerBip(392.00, 0.15, 'square'), 240); // Sol
     setTimeout(() => this.jouerBip(523.25, 0.35, 'square'), 380); // Do haut
   }
+
+  /**
+   * Bruit de relais mécanique d'alimentation (Power Switch On/Off)
+   */
+  public jouerSonRelaisPower(allume: boolean): void {
+    const ctx = this.initCtx();
+    if (!ctx) return;
+    try {
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      if (allume) {
+        osc.frequency.setValueAtTime(60, now);
+        osc.frequency.exponentialRampToValueAtTime(180, now + 0.08);
+      } else {
+        osc.frequency.setValueAtTime(180, now);
+        osc.frequency.exponentialRampToValueAtTime(40, now + 0.1);
+      }
+
+      gain.gain.setValueAtTime(this.volume * 0.8, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + (allume ? 0.08 : 0.12));
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.12);
+    } catch {}
+  }
+
+  /**
+   * Effets sonores rétro pour les jeux et applications
+   * 1 = Laser, 2 = Jump, 3 = Pièce (Coin), 4 = Explosion, 5 = Powerup, 6 = Choc / Balle
+   */
+  public jouerEffetJeu(id: number): void {
+    const ctx = this.initCtx();
+    if (!ctx) return;
+
+    try {
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      switch (id) {
+        case 1: // Laser
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(900, now);
+          osc.frequency.exponentialRampToValueAtTime(120, now + 0.12);
+          gain.gain.setValueAtTime(this.volume * 0.6, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+          osc.start(now);
+          osc.stop(now + 0.12);
+          break;
+
+        case 2: // Saut (Jump)
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(150, now);
+          osc.frequency.exponentialRampToValueAtTime(600, now + 0.15);
+          gain.gain.setValueAtTime(this.volume * 0.5, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+          osc.start(now);
+          osc.stop(now + 0.15);
+          break;
+
+        case 3: // Pièce dorée (Coin)
+          this.jouerBip(987.77, 0.07, 'square'); // B5
+          setTimeout(() => this.jouerBip(1318.51, 0.25, 'square'), 75); // E6
+          return;
+
+        case 4: // Explosion
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(120, now);
+          osc.frequency.linearRampToValueAtTime(30, now + 0.35);
+          gain.gain.setValueAtTime(this.volume * 0.8, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+          osc.start(now);
+          osc.stop(now + 0.35);
+          break;
+
+        case 5: // Powerup
+          this.jouerBip(330, 0.06, 'triangle');
+          setTimeout(() => this.jouerBip(440, 0.06, 'triangle'), 60);
+          setTimeout(() => this.jouerBip(550, 0.06, 'triangle'), 120);
+          setTimeout(() => this.jouerBip(880, 0.15, 'triangle'), 180);
+          return;
+
+        case 6: // Choc / Rebond
+        default:
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(220, now);
+          osc.frequency.exponentialRampToValueAtTime(80, now + 0.04);
+          gain.gain.setValueAtTime(this.volume * 0.5, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+          osc.start(now);
+          osc.stop(now + 0.04);
+          break;
+      }
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+    } catch {}
+  }
 }
